@@ -1,0 +1,27 @@
+{
+  "name": "skink",
+  "version": "0.0.0",
+  "description": "C-style programming language with numerical analysis features",
+  "main": "src/Skink.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nirvanasupermind/skink.git"
+  },
+  "keywords": [
+    "programming-language",
+    "language",
+    "interpreter",
+    "ast-interpreter",
+    "numerical-analysis",
+    "number-theory"
+  ],
+  "author": "nirvanasupermind",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nirvanasupermind/skink/issues"
+  },
+  "homepage": "https://github.com/nirvanasupermind/skink#readme"
+}
