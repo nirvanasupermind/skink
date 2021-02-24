@@ -1,0 +1,260 @@
+(begin
+    /* UTIL FUNCTIONS */
+    (def ssgn (x)
+        (if (= (charAt x 0) "-") -1 1))
+
+    (def sabs (x)
+        (if (= (charAt x 0) "-") (substring x 1) x))
+
+    (def reverse (x) (begin
+        (var result "")
+        (for (var i 0) (< i (len x)) (+= i 1) (begin
+            (var j (- (+ i 1)))
+            (set result (+ result (charAt x j)))
+        ))
+        result
+    ))
+
+    (def max (a b) (if (< a b) b a))
+    (def min (a b) (if (< a b) a b))
+
+    (def pad (a b) (begin
+        (var result a)
+        (while (< (len result) b) (begin
+            (set result (+ "0" result))
+        ))
+        result
+    ))
+
+    /*
+    Class for immmutable arbitrary-precision integers.
+    */
+    (class BigInteger null (begin
+        (def constructor (this s u) (begin
+            (set s (string s)) /* Cast to string */
+            /* Defaults */
+            (if (= s "") (set s "0"))
+            (if (= s null) (set s "0"))
+            (if (= u null) (set u 1))
+
+            /* Now, we want to represent the number as (sign,absolute_value) */
+            (var t (sabs s)) /* absolute value */
+            /* Remove leading zeros */
+            (var i 0)
+            (while (= (charAt t i) "0") (begin
+                (set i (+ i 1))
+            ))
+            (if (= s "0") (set i 0) null)
+            (set (prop this "value") (substring t i))
+            (set (prop this "sign") (* (ssgn s) u))
+
+        ))
+
+        /*
+        OLD
+        (def addDigits1 (a b) (begin
+            (string (+ (int a) (int b)))
+        ))
+
+        (def addDigits (a b carry) (begin
+            (addDigits1 (addDigits1 a b) carry)
+        ))
+        */
+
+
+        /* Addition */
+        (def add (a b) (begin
+            (set b (new BigInteger b))
+            (var x a)
+            (var y b)
+
+            /* Put bigger argument first */
+            (set a (max x y))
+            (set b (min x y))
+
+            (var result (begin
+                /* it's our main body... */
+                /* It is assumed X and Y are both +ve */
+                (var str1 (prop a "value"))
+                (var str2 (prop b "value"))
+                /*
+                Before proceeding further, make sure length
+                of str2 is larger.
+                */
+                (if (> (len str1) (len str2)) (begin
+                    (var t str1)
+                    (set str1 str2)
+                    (set str2 t)
+                ))
+
+                /* Take an empty String for storing result */
+                (var str "")
+                /* Calculate length of both String */
+                (var n1 (len str1))
+                (var n2 (len str2))
+                /* Reverse both of Strings */
+                (set str1 (reverse str1))
+                (set str2 (reverse str2))
+                (var carry 0)
+                (for (var i 0) (< i n1) (+= i 1) (begin
+                    /*
+                    Do school mathematics, compute sum of
+                    current digits and carry
+                    */
+                    (var sum (int (charAt str1 i)))
+                    (+= sum (int (charAt str2 i)))
+                    (+= sum carry)
+                    (+= str (string (% sum 10)))
+
+                    /* Calculate carry for next step */
+                    (set carry (/ sum 10))
+                ))
+
+                /* Add remaining digits of larger number */
+                (for (var i n1) (< i n2) (+= i 1) (begin
+                    (var sum (+ (int (charAt str2 i)) carry))
+                    (+= str (string (% sum 10)))
+                ))
+
+
+                /* Add remaining carry */
+                (set str (+ str carry))
+                /* reverse resultant String  */
+                (set str (reverse str))
+                (new BigInteger str)
+            ))
+
+            (if (< y 0) (begin
+                (var n1 (neg x))
+                (var n2 (neg y))
+                (if (>= x 0)
+                    (set result (sub x (neg y)))
+                    (set result (neg (+ n2 n1))))
+            ))
+
+            result
+        ))
+
+
+        /* Returns the negated value. */
+        (def neg (a) (begin
+            (new BigInteger (prop a "value") (- (prop a "sign")))
+        ))
+
+        /* Subtraction. */
+        (def sub (a b) (begin
+            (set b (new BigInteger b))
+            (var x a)
+            (var y b)
+
+            (var result)
+             
+            (if (< x y) (set result (neg (sub y x)))) /* If X < Y then switch place and calculate -(Y - X)... just to save coding :) */
+            (if (>= x y) (set result (begin
+                /* THIS is the real calculation time... */
+                (var str1 (prop a "value")) 
+                (var str2 (prop b "value"))
+
+                /* Take an empty string for storing result */
+                (var str "")
+
+                /* Calculate length of both string */
+                (var n1 (len str1))
+                (var n2 (len str2))
+
+                /* Reverse both of strings */
+                (set str1 (reverse str1))
+                (set str2 (reverse str2))
+                (var carry 0)
+                /*  Run loop till small string length
+                    and subtract digit of str1 to str2 */
+                (for (var i 0) (< i n2) (+= i 1) (begin
+                    /* Do school mathematics, 
+                        compute difference of
+                        current digits */
+                    (var sub (- (int (charAt str1 i)) 
+                                (int (charAt str2 i))))
+                    (-= sub carry)
+                    
+                    /* If subtraction is less then zero
+                    we add then we add 10 into sub and
+                    take carry as 1 for calculating next step */
+                    (if (< sub 0) (begin
+                        (+= sub 10)
+                        (set carry 1)
+                    ) (set carry 0))
+
+                    (+= str (string sub))
+                ))
+
+                (for (var i n2) (< i n1) (+= i 1) (begin
+                    (var sub (- (int (charAt str1 i)) carry))
+                    /* if the sub value is -ve, then make it
+                       positive */
+                    (if (< sub 0) (begin
+                        (set sub (+ sub 10))
+                        (set carry 1)
+                    ) (set carry 0))
+
+                    (+= str (string sub))
+                )) 
+
+
+                (set str (reverse str))
+
+                str
+            )))
+            
+            (new BigInteger result)
+        ))
+
+        /* Converts the number to "int" type. */
+        (def toInt (a) (begin
+            (int (toString a))
+        ))
+
+        /* Converts the number to "long" type. */
+        (def toLong (a) (begin
+            (long (toString a))
+        ))
+
+        /* Spaceship operator. */
+        (def compareTo (a b) (begin
+            (if (< a 0))
+        ))
+
+        /* Returns whether number is less than other. */
+        (def lt (a b) (begin
+            (set b (new BigInteger b))
+            (var padLength (max (len (toString a)) (len (toString b))))
+            (< (pad (toString a) padLength) (pad (toString b) padLength)) /* ASCII sort */
+        ))
+
+        /* Returns whether number is less than or equal to other. */
+        (def le (a b) (begin
+            (set b (new BigInteger b))
+            (var padLength (max (len (toString a)) (len (toString b))))
+            (<= (pad (toString a) padLength) (pad (toString b) padLength)) /* ASCII sort */
+        ))
+
+       /* Returns whether number is greater than other. */
+        (def gt (a b) (begin
+            (set b (new BigInteger b))
+            (var padLength (max (len (toString a)) (len (toString b))))
+            (> (pad (toString a) padLength) (pad (toString b) padLength)) /* ASCII sort */
+        ))
+
+        /* Returns whether number is greater than or equal to other. */
+        (def ge (a b) (begin
+            (set b (new BigInteger b))
+            (var padLength (max (len (toString a)) (len (toString b))))
+            (>= (pad (toString a) padLength) (pad (toString b) padLength)) /* ASCII sort */
+        ))
+
+        /* Converts the number to "string" type. */
+        (def toString (a) (begin
+            (if (= (prop a "sign") -1) (+ "-" (prop a "value")) (prop a "value"))
+        ))
+
+    ))
+)

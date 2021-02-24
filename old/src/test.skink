@@ -1,0 +1,10 @@
+(begin
+    (using "skink:BigInteger")
+    (module X (begin
+        (var a 2)
+    ))
+
+    (var x0 (new BigInteger "-2"))
+    (var x1 (new BigInteger "-3"))
+    (print (- x0 x1))
+)

@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+var Skink = require("../src/Skink.js")
+const fs = require("fs");
+function main(argv) {
+  const [_node, _path, mode, exp] = argv;
+
+  const skink = new Skink();
+
+  // Direct expression:
+
+  if (mode === '-e') {
+    return skink.eval(exp);
+  }
+
+  // Eva file:
+
+  if (mode === '-f') {
+    const src = fs.readFileSync(exp, 'utf-8');
+    return skink.eval(src);
+  }
+}
+
+main(process.argv);
