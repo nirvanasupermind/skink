@@ -92,11 +92,6 @@ class Skink {
     _preProcess(exp) {
         exp = removeComments(exp);
         exp = exp.replace(/(\b[0-9]+(\.[0-9]+)?(e[+-]?[0-9]+)\b)/g, function (_, grp) {
-            // console.log("2", arguments);
-
-            // if (!(convertSciToStandard(grp).includes("."))) {
-            //     return convertSciToStandard(grp) + ".0";
-            // }
             return convertSciToStandard(grp);
         });
 
@@ -255,7 +250,7 @@ class Skink {
             const instanceEnv = new Environment({}, classEnv);
 
             const args = exp
-                .slice(2)
+                [2]
                 .map((arg) => this.eval2(arg, env, true))
 
             this._callUserDefinedFunction(

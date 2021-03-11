@@ -1,0 +1,44 @@
+#!/usr/bin/env node
+var Skink = require("../src/Skink.js")
+const fs = require("fs");
+var prompt = require("prompt-sync")();
+var stdin = process.stdin;
+
+
+
+function main(argv) {
+    const [_node, _path, mode, exp] = argv;
+
+    const skink = new Skink();
+
+    // Direct REPL:
+
+    if (mode === '-i') {
+        console.log('Type "exit" to exit')
+
+        while (true) {
+            try {
+                var input = prompt("skink> ")
+                if (input === "exit") { break }
+                if (input === "clear") { console.log(Array(100).join("\n")); } else {
+                    console.log("=> " + Skink.prettyPrint(skink.eval(input)));
+                }
+            } catch (e) {
+                if (!(input === "")) {
+                    console.log("" + e);
+                }
+
+            }
+        }
+    }
+
+
+    // Eva file:
+
+    if (mode === '-f') {
+        const src = fs.readFileSync(exp, 'utf-8');
+        return skink.eval(src);
+    }
+}
+
+main(process.argv);
