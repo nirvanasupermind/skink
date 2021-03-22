@@ -114,7 +114,7 @@ const lexRules = [[/^\(/, function() { return "'('"; }],
 [/^"[^\"\\\r\n]*(?:\\.[^\"\\\r\n]*)*"/, function() { return 'STRING' }],
 [/^[+-]?\d+\b(?![\.\/])/, function() { return 'INT' }],
 [/^([+-]?([0-9]*[.])[0-9]+)/, function() { return 'FLOAT' }],
-[/^[\w\-+*=<>\/%!]+/, function() { return 'SYMBOL' }]];
+[/^[\w\-+*=<>\/%!\&\|]+/, function() { return 'SYMBOL' }]];
 const lexRulesByConditions = {"INITIAL":[0,1,2,3,4,5,6]};
 
 const EOF_TOKEN = {

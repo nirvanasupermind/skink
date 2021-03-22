@@ -1,3 +1,7 @@
+var lynx = require("lynx-js");
+var Int = lynx.Int._.int(32);
+var Long = lynx.Int;
+
 /**
  * Environment: names storage.
  */
@@ -71,6 +75,24 @@ class Environment {
         return this.parent.has(name);
     }
 }
+
+
+Environment.GlobalEnvironment = new Environment({
+    //internal methods
+    __int: Int,
+    __long: Long,
+    __double: Number.parseFloat,
+    __string: String,
+    __bool: Boolean,
+    assert(a) {
+        if(!Environment.GlobalEnvironment.lookup("__bool")(a)) 
+            throw new Error("AssertionError")
+    },    
+    __typeAssert(a,b) {
+        Environment.GlobalEnvironment.lookup("assert")(a.parent === b);
+        return a;
+    }
+});
 
 
 module.exports = Environment;

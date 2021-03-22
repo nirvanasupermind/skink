@@ -25,11 +25,13 @@
 
 \s+               /* skip whitespace */
 
-\"[^\"\\\r\n]*(?:\\.[^\"\\\r\n]*)*\"   return 'STRING'
+\"[^\"]*\"         return 'STRING'
 
 [+-]?\d+\b(?![\.\/]) return 'INT'
 
-([+-]?([0-9]*[.])[0-9]+) return 'FLOAT'
+[+-]?\d+[Ll]\b(?![\.\/]) return 'LONG'
+
+([+-]?([0-9]*[.])[0-9]+) return 'DOUBLE'
 
 [\w\-+*=<>/%!]+     return 'SYMBOL'
 
@@ -46,10 +48,14 @@ Exp
   ;
 
 Atom
-  : FLOAT { $$ = Number($1) }
+  : DOUBLE { $$ = Number($1) }
   | INT { 
-      var lynx = require("lynx-js");
-      $$ = new lynx.Int($1);
+      var types = require("../types.js");
+      $$ = new types.Int($1);
+  }
+  | LONG { 
+      var types = require("../types.js");
+      $$ = new types.Long($1.slice(0,-1));
   }
   | STRING
   | SYMBOL

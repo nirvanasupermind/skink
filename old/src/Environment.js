@@ -1,4 +1,3 @@
-class Internal extends Array { }
 /**
  * Environment: names storage.
  */
@@ -9,6 +8,15 @@ class Environment {
     constructor(record = {}, parent = null) {
         this.record = record;
         this.parent = parent;
+        // this.define("this",this);
+    }
+
+    static clone(original) {
+        if (typeof original !== "object" || original == null) { return original; }
+        // Use this approach
+        //Method 1 - clone will inherit the prototype methods of the original.
+        let cloneWithPrototype = Object.assign(Object.create(Object.getPrototypeOf(original)), original);
+        return cloneWithPrototype;
     }
 
     /**
@@ -62,16 +70,7 @@ class Environment {
 
         return this.parent.has(name);
     }
-
-
-
-
-
 }
-
-Environment.internal = Internal;
-
-
 
 
 module.exports = Environment;

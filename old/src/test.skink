@@ -1,10 +1,8 @@
 (begin
-    (using "skink:BigInteger")
-    (module X (begin
-        (var a 2)
-    ))
+    (set (prop opts "colors") true)
+    (use "skink:BigInteger")
+    (var x0 (new BigInteger -1))
+    (var x1 (new BigInteger 0))
 
-    (var x0 (new BigInteger "-2"))
-    (var x1 (new BigInteger "-3"))
-    (print (- x0 x1))
+    (print (+ x0 x1))
 )

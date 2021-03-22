@@ -201,7 +201,7 @@ NdArray.prototype.get = function (...n) {
     for (var i = 0; i < n.length; i++) {
         result = result[n[i]];
     }
-    console.log(result);
+    // console.log(result);
     if(Array.isArray(result)) { 
         result = new NdArray(result);
     }

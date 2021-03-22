@@ -1,12 +1,36 @@
 var Environment = require("./Environment.js");
-var Transformer = require("./Transformer.js");
 var lynx = require("lynx-js");
-var ArrayList = require("./ArrayList.js");
+var types = require("./types.js");
+// var ArrayList = require("./ArrayList.js");
 var fs = require("fs");
 var ends = `"'`;
 var path = require("path");
 var util = require("util");
-var yyparse = require("./parser/yyparse.js");
+var assert = require("assert");
+var Int = lynx.Int._.int(32);
+var Long = lynx.Int;
+var NULL = null;
+
+// var yyparse = require("./parser/yyparse.js");
+
+var colors = util.inspect.colors;
+function coloredText(x, tint) {
+    return `\u001b[${colors[tint][0]}m${x}\u001b[${colors[tint][1]}m`
+}
+
+const getCircularReplacer = () => {
+    const seen = new WeakSet();
+    return (key, value) => {
+        if (typeof value === "object" && value !== null) {
+            if (seen.has(value)) {
+                return;
+            }
+            seen.add(value);
+        }
+        return value;
+    };
+};
+
 // var HashMap = require("./HashMap.js");
 
 ///////////////////////////////////////////////////////////////////////
@@ -44,18 +68,23 @@ function removeComments(toBeStrippedStr) {
     return toBeStrippedStr.replace(/(^|[^"])\/\*[\s\S]*?\*\//g, "");
 }
 
+let clone = (orig) => Object.assign(Object.create(Object.getPrototypeOf(orig)), orig)
+var myGlobal = clone(Environment.GlobalEnvironment);
+for(var i = 0; i < Object.keys(types.typeEnv.record).length; i++) {
+    myGlobal.define(Object.keys(types.typeEnv.record)[i],Object.values(types.typeEnv.record)[i])
+}
 /**
  * Skink interpreter.
  */
 class Skink {
-    constructor(global = GlobalEnvironment) {
+    constructor(global = myGlobal) {
         this.global = global;
-        this._transformer = new Transformer();
+        // this._transformer = new Transformer();
     }
 
     _parseString(exp, env = this.global) {
         return interpretEscapes(exp.slice(1, -1))
-            .replace(/\$\{(.*?)\}/g, (a, b) => prettyPrint(this.eval(b, env)));
+            .replace(/\$\{(.*?)\}/g, (a, b) => prettyPrint2(this.eval(b, env)));
     }
 
     _preProcess(src) {
@@ -67,7 +96,7 @@ class Skink {
     eval2(exp, env = this.global) {
         // --------------------------------------------
         // Self-evaluating expressions:
-        if (this._isInt(exp) || this._isFloat(exp)) {
+        if (this._isInt(exp) || exp instanceof Int || this._isFloat(exp) || exp instanceof Environment) {
             return exp;
         }
 
@@ -88,31 +117,31 @@ class Skink {
         }
 
 
-        if (exp[0] === 'def') {
-            exp = this._transformer.transformDefToVarLambda(exp);
-            return this.eval2(exp, env);
-        }
+        // if (exp[0] === 'def') {
+        //     exp = this._transformer.transformDefToVarLambda(exp);
+        //     return this.eval2(exp, env);
+        // }
 
-        if (exp[0] === "+=") {
-            exp = this._transformer.transformPlusEquals(exp);
-            return this.eval2(exp, env, true);
-        }
+        // if (exp[0] === "+=") {
+        //     exp = this._transformer.transformPlusEquals(exp);
+        //     return this.eval2(exp, env, true);
+        // }
 
-        if (exp[0] === "-=") {
-            exp = this._transformer.transformMinusEquals(exp);
-            return this.eval2(exp, env, true);
-        }
+        // if (exp[0] === "-=") {
+        //     exp = this._transformer.transformMinusEquals(exp);
+        //     return this.eval2(exp, env, true);
+        // }
 
 
-        if (exp[0] === "for") {
-            exp = this._transformer.transformForToWhile(exp);
-            return this.eval2(exp, env, true);
-        }
+        // if (exp[0] === "for") {
+        //     exp = this._transformer.transformForToWhile(exp);
+        //     return this.eval2(exp, env, true);
+        // }
 
-        if (exp[0] === "switch") {
-            exp = this._transformer.transformSwitchToIf(exp);
-            return this.eval2(exp, env, true);
-        }
+        // if (exp[0] === "switch") {
+        //     exp = this._transformer.transformSwitchToIf(exp);
+        //     return this.eval2(exp, env, true);
+        // }
 
 
 
@@ -210,7 +239,7 @@ class Skink {
         if (exp[0] === 'while') {
             const [_tag, condition, body] = exp;
             let result;
-            while (!this._falsey(this.eval2(condition, env))) {
+            while (Environment.GlobalEnvironment.lookup("__bool")(this.eval2(condition, env))) {
                 result = this.eval2(body, env)
             }
             return result;
@@ -239,45 +268,48 @@ class Skink {
             const [_tag, name, body] = exp;
             const moduleEnv = new Environment({}, env);
             this._evalBody(body, moduleEnv);
+            this.eval2(["begin", body], env);
             return env.define(name, moduleEnv);
         }
 
-        if (exp[0] === 'import') {
-            const [_tag, url] = exp;
-            var thePath = path.join(__dirname, url.slice(1, -1));
+        // if (exp[0] === 'import') {
+        //     const [_tag, url] = exp;
+        //     var thePath = path.join(__dirname, url.slice(1, -1));
 
-            var src = fs.readFileSync(thePath, 'utf8')
-            const body = yyparse.parse(src);
-            const moduleExp = ["module", "_", body];
-            return this.eval2(moduleExp, env);
-        }
+        //     var src = fs.readFileSync(thePath, 'utf8')
+        //     const body = yyparse.parse(src);
+        //     const moduleExp = ["module", "_", body];
+        //     this.eval2(["begin", body], env);
+        //     return this.eval2(moduleExp, env);
+        // }
 
-        if (exp[0] === 'use') {
-            var [_tag, url] = exp;
-            url = this.eval(url, env);
-            if (typeof url === "string") {
-                if (!url.includes(".")) {
-                    url += ".skink";
-                }
+        // if (exp[0] === 'use') {
+        //     var [_tag, url] = exp;
+        //     url = this.eval(url, env);
+        //     if (typeof url === "string") {
+        //         if (!url.includes(".")) {
+        //             url += ".skink";
+        //         }
 
 
-                url = url.replace(/skink\:/g,
-                    path.join("../lib/", "./"));
-                var thePath = path.join(__dirname, url);
+        //         url = url.replace(/skink\:/g,
+        //             path.join("../sdk/", "./"));
+        //         var thePath = path.join(__dirname, url);
 
-                var src = fs.readFileSync(thePath, 'utf8')
-                const body = yyparse.parse(this._preProcess(src));
-                const moduleExp = ["module", "_", body];
-                var module = this.eval2(moduleExp, env);
-                Object.assign(env.record, module.record);
-                return module;
-            } else {
+        //         var src = fs.readFileSync(thePath, 'utf8')
+        //         const body = yyparse.parse(this._preProcess(src));
+        //         const moduleExp = ["module", "_", body];
+        //         this.eval2(["begin", body], env);
+        //         var module = this.eval2(moduleExp, env);
+        //         Object.assign(env.record, module.record);
+        //         return module;
+        //     } else {
 
-                var module = url;
-                Object.assign(env.record, module.record);
-                return module;
-            }
-        }
+        //         var module = url;
+        //         Object.assign(env.record, module.record);
+        //         return module;
+        //     }
+        // }
 
 
 
@@ -286,7 +318,7 @@ class Skink {
 
         if (exp[0] === 'if') {
             const [_tag, condition, consequent, alternate] = exp;
-            if (this._falsey(this.eval2(condition, env))) {
+            if (!Environment.GlobalEnvironment.lookup("__bool")(this.eval2(condition, env))) {
                 return this.eval2(alternate, env);
             } else {
                 return this.eval2(consequent, env);
@@ -336,7 +368,7 @@ class Skink {
     _callUserDefinedFunction(fn, args) {
         // console.log(fn, args);
         while (args.length < fn.params.length) {
-            args.push(null);
+            args.push(NULL);
         }
 
         const activationRecord = {};
@@ -351,7 +383,7 @@ class Skink {
 
         var t1 = this._evalBody(fn.body, activationEnv);
         if (t1 === undefined) {
-            return null;
+            return NULL;
         } else {
             return t1;
         }
@@ -365,18 +397,6 @@ class Skink {
         return this.eval2(body, env);
     }
 
-    eval(exp, env) {
-        // console.log("**",exp);
-        exp = yyparse.parse(this._preProcess(exp));
-        var t1 = this.eval2(exp, env)
-        return t1;
-    }
-
-    evalFile(exp, env) {
-        // console.log("dir:"+__dirname);
-        exp = "" + fs.readFileSync(path.join(__dirname, exp));
-        return this.eval(exp, env);
-    }
 
 
     _evalBlock(block, env) {
@@ -412,7 +432,7 @@ class Skink {
     }
 
     _isVariableName(exp) {
-        return typeof exp === 'string' && /^[+\-*/<>=a-zA-Z0-9_\!]+$/.test(exp);
+        return typeof exp === 'string' && /^[+\-*/%<>=a-zA-Z0-9_\!\&\|]+$/.test(exp);
     }
 
 
@@ -475,8 +495,15 @@ function ord(string) {
     return code
 }
 
-function pfapply(fn) {
-    return (...x) => fn(...x.map(Number.parseFloat));
+function mathTemplate(fn, delegate) {
+    return (...x) => {
+        if (delegate && x[0] instanceof Environment
+            && x[0].has(delegate)) {
+            return new Skink()._callUserDefinedFunction(x[0].lookup(delegate), x.slice(1))
+        } else {
+            return fn(...x.map(Number.parseFloat));
+        }
+    };
 }
 
 function logBase(x, b = Math.E) {
@@ -510,229 +537,10 @@ var factorial = (function () {
     return fn;
 })();
 
-var GlobalEnvironment = new Environment({
-    "null": null,
-    "true": true,
-    "false": false,
-    "Infinity": Infinity,
-    "parseInt": (...args) => lynx.Int(...args),
-    "Math": new Environment({
-        "E": Math.E,
-        "PI": Math.PI,
-        "sin": pfapply(Math.sin),
-        "cos": pfapply(Math.cos),
-        "tan": pfapply(Math.tan),
-        "asin": pfapply(Math.asin),
-        "acos": pfapply(Math.acos),
-        "atan": pfapply(Math.atan),
-        "atan2": pfapply(Math.atan2),
-        "exp": pfapply(Math.exp),
-        "log": pfapply(logBase),
-        "sqrt": pfapply(Math.sqrt),
-        "pow": pfapply(Math.pow),
-        "ceil": pfapply(Math.ceil),
-        "floor": pfapply(Math.floor),
-        "rint": pfapply(evenRound),
-        "round": pfapply((a) => new lynx.Int(Math.round(a))),
-        factorial(a) {
-            if (a instanceof lynx.Int) {
-                return factorial(a);
-            } else {
-                return pfapply(lynx.fac)(a);
-            }
-        },
-        "random": Math.random,
-        abs(a) {
-            if (a instanceof lynx.Int) {
-                return a.abs();
-            } else {
-                return pfapply(Math.abs)(a);
-            }
-        },
-        min(a, b) {
-            if (a instanceof lynx.Int && b instanceof lynx.Int) {
-                return (a.compareTo(b) === -1 ? a : b);
-            } else {
-                return pfapply(Math.min)(a, b);
-            }
-        },
-        max(a, b) {
-            if (a instanceof lynx.Int && b instanceof lynx.Int) {
-                return (a.compareTo(b) === 1 ? a : b);
-            } else {
-                return pfapply(Math.max)(a, b);
-            }
-        }
-    }),
-    "ord": (a) => new lynx.Int(ord(a)),
-    "+": binOp((a, b) => a + b, "add"),
-    "-": binOp((a, b) => a - b, "sub"),
-    "*": binOp((a, b) => a * b, "mul"),
-    "/": binOp((a, b) => a / b, "div"),
-    "!": new Skink()._falsey,
-    "<"(op1, op2) {
-        if (typeof op1 === "string" || typeof op2 === "string") {
-            return op1.localeCompare(op2) < 0;
-        } else if (op1 instanceof Environment && op1.has("lt")) {
-            return skink._callUserDefinedFunction(op1.lookup("lt"), [op2]);
-        } else if (!(op1 instanceof lynx.Int)) {
-            return Number.parseFloat(op1) < Number.parseFloat(op2);
-        } else {
-            return op1.compareTo(op2) < 0;
-        }
-    },
-    ">"(op1, op2) {
-        if (typeof op1 === "string" || typeof op2 === "string") {
-            return op1.localeCompare(op2) < 0;
-        } else if (op1 instanceof Environment && op1.has("gt")) {
-            return skink._callUserDefinedFunction(op1.lookup("gt"), [op2]);
-        } else if (!(op1 instanceof lynx.Int)) {
-            return Number.parseFloat(op1) < Number.parseFloat(op2);
-        } else {
-            return op1.compareTo(op2) < 0;
-        }
-    },
-    "="(op1, op2) {
-        if (typeof op1 === "object" || typeof op2 === "object") {
-            return S(op1) === S(op2);
-        } else {
-            return op1 === op2;
-        }
-    },
-    print(...args) {
-        // console.log(args[0]);
-        console.log(...args.map(prettyPrint));
-    },
-    list(...args) {
-        return new ArrayList(args);
-    },
-    add(x, y) {
-        return x.add(y);
-    },
-    remove(x, y) {
-        x.remove(Number.parseFloat(y));
-    },
-    len(x) {
-        var skink = new Skink();
-        var type = GlobalEnvironment.lookup("type");
-        var result;
-        if (x instanceof ArrayList) {
-            result = x.value.length;
-        } else if (x instanceof Environment && x.has("length")) {
-            result = skink._callUserDefinedFunction(x.lookup("length"), []);
-        } else if (typeof x === "strring") {
-            result = x.length;
-        } else {
-            throw new Error(`object of type "${type(x)}" has no len()`)
-        }
-
-        return new lynx.Int(result);
-    },
-    type(x) {
-        switch (getInstanceType(x)) {
-            case "Number": return "Float"
-            case "Environment":
-                if (x.parent && x.parent.__name__) {
-                    return x.parent.__name__;
-                } else {
-                    return "Environment"
-                }
-            default: return getInstanceType(x)
-
-
-        }
-    },
-    map(x, y) {
-        var skink = new Skink();
-        var fn;
-        if (typeof y !== "function") {
-            fn = (...args) => skink._callUserDefinedFunction(y, args);
-        } else {
-            fn = y;
-        }
-
-        return new ArrayList(x.value.map(fn));
-    },
-    indexOf(x, y) {
-        if (typeof x === "string") { //string
-            if (x.indexOf(y) === -1) {
-                return null;
-            } else {
-                return new lynx.Int(x.indexOf(y));
-            }
-        } else { //ArrayList
-            if (x.value.map(S).indexOf(S(y)) === -1) {
-                return null;
-            } else {
-                return new lynx.Int(x.value.map(S).indexOf(S(y)));
-            }
-        }
-    },
-    slice(x, y, z = null) {
-        if (z === null) { z = (x.length ? x.length : x.value.length) }
-        if (x instanceof ArrayList) {
-            return new ArrayList(x.value.slice(Number.parseFloat(y), Number.parseFloat(z)));
-        } else {
-            return x.slice(Number.parseFloat(y), Number.parseFloat(z));
-        }
-    }
-});
-
-function S(x) {
-    return getInstanceType(x) + " " + stringify(x);
-}
-
-function stringify(x) {
-    const getCircularReplacer = () => {
-        const seen = new WeakSet();
-        return (key, value) => {
-            var x = value;
-            var skink = new Skink();
-            if (x instanceof ArrayList) return x.value;
-            if (x instanceof Environment && x.has("toString")) {
-                return prettyPrint(skink._callUserDefinedFunction(x.lookup("toString"), x));
-            }
-
-            if (value instanceof lynx.Int) { return "" + value }
-            if (typeof value === "function") { //python style
-                return "<built-in function " + value.name + ">";
-            }
-
-            if (typeof value === "object" && value !== null) {
-                if (seen.has(value)) {
-                    return "[Circular]";
-                }
-                seen.add(value);
-            }
-
-            return value;
-        };
-    };
 
 
 
-    return JSON.stringify(x, getCircularReplacer());
-}
+Skink.Int = Int;
+Skink.Long = Long;
 
-
-function prettyPrint(x) {
-    var skink = new Skink();
-    if (typeof x === "string") {
-        return x;
-    } else if (x instanceof Environment && x.has("toString")) {
-        return prettyPrint(skink._callUserDefinedFunction(x.lookup("toString"), x));
-    } else if (Object.is(x, -0)) {
-        return "-0";
-    } else if (stringify(x) === "null") {
-        return "" + x;
-    } else {
-        if (skink._isString(stringify(x))) {
-            return stringify(x).slice(1, -1);
-        } else {
-            return stringify(x);
-        }
-    }
-}
-
-Skink.prettyPrint = prettyPrint;
-module.exports = Skink;
+module.exports = Skink; 

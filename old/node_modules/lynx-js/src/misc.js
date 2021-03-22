@@ -796,7 +796,6 @@ function approx(f, n = 20) {
      
 
 /**
- * 
  * Returns the absolute value of method.
  * @param {*} x 
  */
@@ -815,6 +814,21 @@ function abs(x) {
 }
 
 
+/** 
+ * Create a Hilbert matrix of order n.
+ */
+function hilbert(n) {
+    n = parseFloat(n);
+    var result = [];
+    for(var i = 1; i <= n; i++) {
+        result.push([]);
+        for(var j = 1; j <= n; j++) {
+            result[i-1][j-1] = 1/(i+j-1);
+        }
+    }
+
+    return new NdArray(result);
+}
 //Alias
 var factorial = fact = fac;
 var euler_gamma = 0.5772156649015329;
@@ -860,7 +874,8 @@ Object.assign(_,{
     fact,
     factorial,
     identity,
-    isRough
+    isRough,
+    hilbert
 });
 
 

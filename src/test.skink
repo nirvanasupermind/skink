@@ -1,8 +1,0 @@
-(begin
-    (use "skink:HashMap")
-    (var capitalCities (new HashMap (list "Brazil") 
-                                    (list "Brasilia")))
-    ((prop capitalCities "put") "England" "London")
-    ((prop capitalCities "put") "Germany" "Berlin")
-    (print capitalCities)
-)
