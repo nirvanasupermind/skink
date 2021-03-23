@@ -1,22 +1,15 @@
 var Environment = require("./Environment.js");
 var lynx = require("lynx-js");
 var types = require("./types.js");
-// var ArrayList = require("./ArrayList.js");
-var fs = require("fs");
-var ends = `"'`;
-var path = require("path");
-var util = require("util");
-var assert = require("assert");
-var Int = lynx.Int._.int(32);
-var Long = lynx.Int;
 var NULL = null;
+
 
 // var yyparse = require("./parser/yyparse.js");
 
-var colors = util.inspect.colors;
-function coloredText(x, tint) {
-    return `\u001b[${colors[tint][0]}m${x}\u001b[${colors[tint][1]}m`
-}
+// var colors = util.inspect.colors;
+// function coloredText(x, tint) {
+//     return `\u001b[${colors[tint][0]}m${x}\u001b[${colors[tint][1]}m`
+// }
 
 const getCircularReplacer = () => {
     const seen = new WeakSet();
@@ -69,22 +62,124 @@ function removeComments(toBeStrippedStr) {
 }
 
 let clone = (orig) => Object.assign(Object.create(Object.getPrototypeOf(orig)), orig)
-var myGlobal = clone(Environment.GlobalEnvironment);
-for(var i = 0; i < Object.keys(types.typeEnv.record).length; i++) {
-    myGlobal.define(Object.keys(types.typeEnv.record)[i],Object.values(types.typeEnv.record)[i])
-}
+
+
+// JSON.pruned : a function to stringify any object without overflow
+// example : var json = prune({a:'e', c:[1,2,{d:{e:42, f:'deep'}}]})
+// two additional optional parameters :
+//   - the maximal depth (default : 6)
+//   - the maximal length of arrays (default : 50)
+// GitHub : https://github.com/Canop/JSON.prune
+// This is based on Douglas Crockford's code ( https://github.com/douglascrockford/JSON-js/blob/master/json2.js )
+var prune = (function () {
+    'use strict';
+
+    var DEFAULT_MAX_DEPTH = 6;
+    var DEFAULT_ARRAY_MAX_LENGTH = 50;
+    var seen; // Same variable used for all stringifications
+
+    Date.prototype.toPrunedJSON = Date.prototype.toJSON;
+    String.prototype.toPrunedJSON = String.prototype.toJSON;
+
+    var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+        escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+        meta = {    // table of character substitutions
+            '\b': '\\b',
+            '\t': '\\t',
+            '\n': '\\n',
+            '\f': '\\f',
+            '\r': '\\r',
+            '"': '\\"',
+            '\\': '\\\\'
+        };
+
+    function quote(string) {
+        escapable.lastIndex = 0;
+        return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
+            var c = meta[a];
+            return typeof c === 'string'
+                ? c
+                : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+        }) + '"' : '"' + string + '"';
+    }
+
+    function str(key, holder, depthDecr, arrayMaxLength) {
+        var i,          // The loop counter.
+            k,          // The member key.
+            v,          // The member value.
+            length,
+            partial,
+            value = holder[key];
+        if (value && typeof value === 'object' && typeof value.toPrunedJSON === 'function') {
+            return value.toPrunedJSON(key);
+        }
+
+        switch (typeof value) {
+            case 'string':
+                return quote(value);
+            case 'number':
+                return isFinite(value) ? String(value) : 'null';
+            case 'boolean':
+            case 'null':
+                return String(value);
+            case 'object':
+                if (!value) {
+                    return 'null';
+                }
+                if (depthDecr <= 0 || seen.indexOf(value) !== -1) {
+                    return '"-pruned-"';
+                }
+                seen.push(value);
+                partial = [];
+                if (Object.prototype.toString.apply(value) === '[object Array]') {
+                    length = Math.min(value.length, arrayMaxLength);
+                    for (i = 0; i < length; i += 1) {
+                        partial[i] = str(i, value, depthDecr - 1, arrayMaxLength) || 'null';
+                    }
+                    v = partial.length === 0
+                        ? '[]'
+                        : '[' + partial.join(',') + ']';
+                    return v;
+                }
+                for (k in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, k)) {
+                        try {
+                            v = str(k, value, depthDecr - 1, arrayMaxLength);
+                            if (v) partial.push(quote(k) + ':' + v);
+                        } catch (e) {
+                            // this try/catch due to some "Accessing selectionEnd on an input element that cannot have a selection." on Chrome
+                        }
+                    }
+                }
+                v = partial.length === 0
+                    ? '{}'
+                    : '{' + partial.join(',') + '}';
+                return v;
+        }
+    }
+
+    JSON.pruned = function (value, depthDecr, arrayMaxLength) {
+        seen = [];
+        depthDecr = depthDecr || DEFAULT_MAX_DEPTH;
+        arrayMaxLength = arrayMaxLength || DEFAULT_ARRAY_MAX_LENGTH;
+        return str('', { '': value }, depthDecr, arrayMaxLength);
+    };
+
+    return JSON.pruned;
+}());
+
+
 /**
  * Skink interpreter.
  */
 class Skink {
-    constructor(global = myGlobal) {
+    constructor(global = GlobalEnvironment) {
         this.global = global;
         // this._transformer = new Transformer();
     }
 
     _parseString(exp, env = this.global) {
-        return interpretEscapes(exp.slice(1, -1))
-            .replace(/\$\{(.*?)\}/g, (a, b) => prettyPrint2(this.eval(b, env)));
+        return interpretEscapes(exp.slice(1, -1));
     }
 
     _preProcess(src) {
@@ -96,7 +191,7 @@ class Skink {
     eval2(exp, env = this.global) {
         // --------------------------------------------
         // Self-evaluating expressions:
-        if (this._isInt(exp) || exp instanceof Int || this._isFloat(exp) || exp instanceof Environment) {
+        if (exp instanceof types.Int || exp instanceof types.Long || typeof exp === "number" || exp instanceof Environment) {
             return exp;
         }
 
@@ -105,9 +200,8 @@ class Skink {
             return this._parseString(exp, env);
         }
 
-        if (exp == null || exp == "") { return null }
-
-
+        if (prune(exp) === "null" || prune(exp) === "[]" || exp === "" || exp === undefined) { return; }
+        if (Array.isArray(exp)) { exp = exp.filter((exp) => !(prune(exp) === "null" || prune(exp) === "[]" || exp === "" || exp === undefined)); }
         // --------------------------------------------
         // Block: sequence of expressions
 
@@ -185,8 +279,6 @@ class Skink {
                 // console.log(propName,instanceEnv);
                 if (instanceEnv instanceof Environment) {
                     return instanceEnv.define(propName, this.eval2(value, env));
-                } else if (instanceEnv instanceof ArrayList) {
-                    return instanceEnv.put(propName, this.eval2(value, env));
                 }
             }
 
@@ -200,12 +292,6 @@ class Skink {
             // console.log(name, instanceEnv.record);
             if (instanceEnv instanceof Environment) {
                 return instanceEnv.lookup(name);
-            } else if (instanceEnv instanceof ArrayList) {
-                if (instanceEnv.get(name) === undefined) {
-                    return null;
-                } else {
-                    return instanceEnv.get(name);
-                }
             }
         }
 
@@ -228,7 +314,6 @@ class Skink {
 
             //Class is accesible by name
             return env.define(name, classEnv);
-
         }
 
         if (exp[0] === 'super') {
@@ -255,10 +340,14 @@ class Skink {
                 .slice(2)
                 .map((arg) => this.eval2(arg, env, true))
 
-            this._callUserDefinedFunction(
-                classEnv.lookup('constructor'),
-                [instanceEnv, ...args]
-            )
+            if (typeof classEnv.lookup('constructor') === "function") {
+                classEnv.lookup('constructor')(...[instanceEnv, ...args]);
+            } else {
+                this._callUserDefinedFunction(
+                    classEnv.lookup('constructor'),
+                    [instanceEnv, ...args]
+                )
+            }
 
             return instanceEnv;
         }
@@ -357,8 +446,6 @@ class Skink {
             }
 
             // 2. User-defined function:
-
-
             return this._callUserDefinedFunction(fn, args);
         }
 
@@ -366,7 +453,7 @@ class Skink {
     }
 
     _callUserDefinedFunction(fn, args) {
-        // console.log(fn, args);
+        if(typeof fn === 'function') { return fn(...args) }
         while (args.length < fn.params.length) {
             args.push(NULL);
         }
@@ -452,19 +539,7 @@ function getInstanceTypes(obj) {
     return "" + getInstanceType(...obj);
 }
 
-function binOp(A, B) {
-    return function (op1, op2) {
-        var skink = new Skink();
-        if (op1 instanceof Environment && op1.has(B)) {
-            return skink._callUserDefinedFunction(op1.lookup(B), [op2]);
-        } else if (!(op1 instanceof lynx.Int)
-            || !(op2 instanceof lynx.Int)) {
-            return A(Number.parseFloat(op1), Number.parseFloat(op2));
-        } else {
-            return op1[B](op2);
-        }
-    }
-}
+
 
 //taken from https://locutus.io/php/strings/ord/
 function ord(string) {
@@ -537,10 +612,63 @@ var factorial = (function () {
     return fn;
 })();
 
+function binOp(fn, magicMethod) {
+    return (op1, op2) => {
+        var skink = new Skink();
+        if (op1 instanceof Environment && op1.has(magicMethod)) {
+            return skink._callUserDefinedFunction(op1.lookup(magicMethod), [op2]);
+        } else if (typeof op2 === "number") {
+            return fn(Number.parseFloat(op1), Number.parseFloat(op2));
+        } else {
+            return op1[magicMethod](op2);
+        }
+    }
+}
+
+function getObjectClass(obj) {
+    if (obj && obj.constructor && obj.constructor.toString) {
+        var arr = obj.constructor.toString().match(
+            /function\s*(\w+)/);
+
+        if (arr && arr.length == 2) {
+            return arr[1];
+        }
+    }
+
+    return undefined;
+}
+
+function uid(obj) {
+    return [getObjectClass(obj), pruned(obj)].join(" ");
+}
+
+var GlobalEnvironment = new Environment({
+    "null": null,
+    "true": true,
+    "false": false,
+    //assert
+    assert(a, message) {
+        if (!Environment.GlobalEnvironment.lookup("__bool")(a))
+            throw new Exception(message || "Assertion failed");
+    },
+    "+": binOp((a, b) => a + b, "add"),
+    "-": binOp((a, b) => a - b, "sub"),
+    "*": binOp((a, b) => a * b, "mul"),
+    "/": binOp((a, b) => a / b, "div"),
+    "<": binOp((a, b) => a < b, "lt"),
+    "<=": binOp((a, b) => a <= b, "le"),
+    ">": binOp((a, b) => a > b, "gt"),
+    ">=": binOp((a, b) => a >= b, "ge"),
+    "=": (a, b) => uid(a) === uid(b),
+    print(...args) {
+        console.log(...args.map(prettyPrint));
+    },
+    getType(n) {
+        return n.type;
+    }
+});
 
 
-
-Skink.Int = Int;
-Skink.Long = Long;
+var prettyPrint = String;
 
 module.exports = Skink; 

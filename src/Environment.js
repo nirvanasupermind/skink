@@ -1,6 +1,8 @@
 var lynx = require("lynx-js");
+var assert = require("assert");
 var Int = lynx.Int._.int(32);
 var Long = lynx.Int;
+var Exception = require("./Exception.js");
 
 /**
  * Environment: names storage.
@@ -28,6 +30,10 @@ class Environment {
      */
 
     define(name, value) {
+        // if (this.has(name)) {
+        //     throw new Exception(`Identifier '${name}' has already been declared`)
+        // }
+
         this.record[name] = value;
         return value;
     }
@@ -57,7 +63,7 @@ class Environment {
         }
 
         if (this.parent == null) {
-            throw new ReferenceError(`Variable ${JSON.stringify(name)} is not defined.`);
+            throw new Exception(`Variable ${JSON.stringify(name)} is not defined.`);
         }
 
         return this.parent.resolve(name);
@@ -76,23 +82,6 @@ class Environment {
     }
 }
 
-
-Environment.GlobalEnvironment = new Environment({
-    //internal methods
-    __int: Int,
-    __long: Long,
-    __double: Number.parseFloat,
-    __string: String,
-    __bool: Boolean,
-    assert(a) {
-        if(!Environment.GlobalEnvironment.lookup("__bool")(a)) 
-            throw new Error("AssertionError")
-    },    
-    __typeAssert(a,b) {
-        Environment.GlobalEnvironment.lookup("assert")(a.parent === b);
-        return a;
-    }
-});
 
 
 module.exports = Environment;

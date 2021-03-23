@@ -1,50 +1,24 @@
-var Environment = require("./Environment.js")
 var lynx = require("lynx-js");
 var Environment = require("./Environment.js");
 
-Function.prototype.clone = function() {
-    var that = this;
-    var temp = function temporary() { return that.apply(this, arguments); };
-    for(var key in this) {
-        if (this.hasOwnProperty(key)) {
-            temp[key] = this[key];
-        }
+var Int = lynx.Int._.int(32);
+var Long = lynx.Int;
+var IntWrapper = new Environment({
+    constructor(self, value) {
+        self.define("value", new Int(value));
+        self.define("add", function (other) {
+            return IntWrapper.lookup("constructor")(new Environment({}), self.lookup("value").add(other.lookup("value")));
+        });
+
+        self.define("sub", function (other) {
+            return IntWrapper.lookup("constructor")(new Environment({}), self.lookup("value").sub(other.lookup("value")));
+        });
+
+        self.define("mul", function (other) {
+            return IntWrapper.lookup("constructor")(new Environment({}), self.lookup("value").mul(other.lookup("value")));
+        });
+
+        return self;
     }
-    return temp;
-};
-
-
-var types = new (function () {
-    //struct for user-defined lambdas
-    function createLambda(params, body, env) {
-        return { params, body, env }
-    }
-
-    function createWrapper(fun, other=[]) {
-        return new Environment(new (function () {
-            this.constructor = createLambda(
-                ["this", "value"],
-                ["begin",
-                        ["set", ["prop", "this", '"value"'], [fun, "value"]],
-                        ...other],
-                Environment.GlobalEnvironment
-            );
-        }));
-    }
-
-
-    this.Int = createWrapper("__int");
-    this.Long = createWrapper("__long");
-    this.Double = createWrapper("__double");
-    this.String = createLambda("__string");
-    this.Boolean = createWrapper("__bool");
-    this.typeEnv = new Environment({
-        int: this.Int,
-        long: this.Long,
-        double: this.Double,
-        string: this.String
-    })
-})();
-
-
-module.exports = types;
+})
+module.exports = { Int, Long, IntWrapper }
