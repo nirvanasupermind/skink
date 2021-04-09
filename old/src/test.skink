@@ -1,8 +1,0 @@
-(begin
-    (set (prop opts "colors") true)
-    (use "skink:BigInteger")
-    (var x0 (new BigInteger -1))
-    (var x1 (new BigInteger 0))
-
-    (print (+ x0 x1))
-)

@@ -1,0 +1,47 @@
+type uint = import("skink:uint").uint;
+namespace X {
+    uint testy = uint(-1);
+    func getTesty = () -> uint { return testy; };
+}
+
+class Vector {
+    void constructor(double[] t) {
+        this.t = t;
+    }
+
+    //Overload "+" operator
+    Vector add(Vector that) {
+        double[] result = [];
+        int i = 0;
+        while(i < this.t.length()) {
+            i += 1;
+            result.append(this.t[i]+that.t[i]);
+        }
+
+        return Vector(result);
+    }
+
+    string toString() {
+        return f"Vector({this.t})";
+    }
+}
+
+class IDVector extends Vector {
+    void constructor(double[] t) {
+        base.constructor(t);
+        this.id = Math.random();
+    }
+
+    IDVector add(IDVector that) {
+        return IDVector(base + Vector(that.t).t);
+    }
+
+    string toString() {
+        return f"IDVector({this.t},id={this.id})";
+    }
+}
+
+Vector2 a = IDVector([1.0,2.0,3.0]);
+Vector2 b = IDVector([0.0,1.0,0.0]);
+out.print(a+b); //-> IDVector([1,3,3],id=0.27293546250934475)
+out.print(X.getTesty()-1); //-> 4294967294
