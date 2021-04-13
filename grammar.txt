@@ -1,14 +1,34 @@
+statements: NEWLINE* expr (NEWLINE+ expr)
 expr: KEYWORD:IDENTIFIER IDENTIFIER EQ expr
     : comp-expr ((KEYWORD:AND|KEYWORD:OR) comp-expr)*
 
 comp-expr: NOT comp-expr
 	     : arith-expr ((EE|LT|GT|LTE|GTE) arith-expr)*
+
 arith-expr: term ((PLUS|MINUS) term)*
-term: factor ((MUL|DIV) factor)*
-factor: (PLUS|MINUS) factor
-atom: INT|FLOAT|IDENTIFIER
-	: LPAREN expr RPAREN
-	: if-expr
+term: call ((MUL|DIV) key-expr)*
+call: atom (LPAREN (expr (COMMA expr)*)? RPAREN)?
+key-expr: dot-expr (LSQUARE dot-expr RSQUARE)?
+dot-expr: atom (DOT IDENTIFIER)?
+
+atom  : (PLUS|MINUS) factor
+		: INT|FLOAT|IDENTIFIER
+		: LPAREN expr RPAREN
+		: if-expr
+		: while-expr
+		: lambda-def
+		: func-def
+		: list-expr
+
+list-expr: LCURLY (IDENTIFIER (COMMA IDENTIFIER)*)? RCURLY
 if-expr: KEYWORD:if expr LCURLY expr RCURLY
 		 (KEYWORD:else KEYWORD:if expr LCURLY expr RCURLY)*
 		 KEYWORD:else LCURLY expr RCURLY
+
+while-expr: KEYWORD:while LCURLY expr RCURLY 
+
+		
+func-def: IDENTIFIER LPAREN 
+		  (IDENTIFIER IDENTIFIER (COMMA IDENTIFIER IDENTIFIER)*)? 
+		  EQ RPAREN expr
+	

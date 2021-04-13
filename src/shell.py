@@ -1,29 +1,37 @@
-#!/usr/bin/env python
 import skink
 import sys
-# import os
-
 # import only system from os
+from os import system, name
+  
+# import sleep to show output for some time period
+from time import sleep
+  
+# define our clear function
+def clear():
+  
+    # for windows
+    if name == 'nt':
+        _ = system('cls')
+  
+    # for mac and linux(here, os.name is 'posix')
+    else:
+        _ = system('clear')
 
 
-opts = skink.get(sys.argv,1)
-fname = skink.get(sys.argv,2)
-# f = open("/bin/foo.txt", "w")
-# f.write("Testy Fox")
+while True:
+    text = input('skink> ')
+    if text.strip() == "": continue
+    if text == 'cls': clear();continue
+    if text == 'exit': break
+    result, error = skink.run('<stdin>', text)
 
-if opts == '-i':
-    while True:
-            text = input("skink> ")
-            if text == '': continue
-            if text == 'exit': break
-            else:
-                result, error = skink.run("<stdin>",text)
-                if error: print(error.as_string())
-                else: print(skink.prettyPrint(result))
+    if error:
+        print(error.as_string())
+    else:
+        if len(result.get('elements')) == 1:
+            print(skink.prettyPrint(result.get('elements')[0]))
+        else:
+            print(skink.prettyPrint(result))
 
 
-# if opts == None and fname == None:
-#     print("""Usage:
-#              skink -i: Interactive shell
-#              skink -f: Run file
-#           """)
+
