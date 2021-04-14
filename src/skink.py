@@ -2529,7 +2529,7 @@ def prettyPrint(n):
                 result = f'{result}{"}"}'
                 return result
        elif isFunction(n) and not isinstance(n,Function):
-               print(n.__name__.lower())
+        #        print(n.__name__.lower())
                return f'<built-in function {n.__name__.lower()}>'
        else:
                return t
