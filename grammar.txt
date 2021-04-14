@@ -16,14 +16,15 @@ atom  : (PLUS|MINUS) factor
 		: LPAREN expr RPAREN
 		: if-expr
 		: while-expr
-		: lambda-def
 		: func-def
 		: list-expr
+		: namespace-expr
 
 list-expr: LCURLY (IDENTIFIER (COMMA IDENTIFIER)*)? RCURLY
-if-expr: KEYWORD:if expr LCURLY expr RCURLY
-		 (KEYWORD:else KEYWORD:if expr LCURLY expr RCURLY)*
-		 KEYWORD:else LCURLY expr RCURLY
+namespace-expr: KEYWORD:namespace LCURLY expr RCURLY 
+if-expr: KEYWORD:if expr LCURLY statements RCURLY
+		 (KEYWORD:elif tatements LCURLY expr RCURLY)*
+		 KEYWORD:else LCURLY statements RCURLY
 
 while-expr: KEYWORD:while LCURLY expr RCURLY 
 
@@ -31,4 +32,7 @@ while-expr: KEYWORD:while LCURLY expr RCURLY
 func-def: IDENTIFIER LPAREN 
 		  (IDENTIFIER IDENTIFIER (COMMA IDENTIFIER IDENTIFIER)*)? 
 		  EQ RPAREN expr
-	
+		: IDENTIFIER LPAREN 
+		  (IDENTIFIER IDENTIFIER (COMMA IDENTIFIER IDENTIFIER)*)? 
+		  LCURLY statements RCURLY
+

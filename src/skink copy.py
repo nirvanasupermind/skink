@@ -98,7 +98,8 @@ class PythonError(RTError):
         self.context = context
         self.error_name = 'Python Error'
         
-        
+   
+
 class IncompatibleTypesError(RTError):
     def __init__(self, pos_start, pos_end, details,context):
         super().__init__(pos_start,pos_end,details,context)
@@ -498,8 +499,6 @@ class WhileNode:
                 self.pos_start = self.condition_node.pos_start
                 self.pos_end = self.body_node.pos_end
 
-                self.pos_end = self.body_node.pos_end
-
 class NamespaceNode:
         def __init__(self,var_name_tok,body_node,pos_end):
                 self.var_name_tok = var_name_tok
@@ -507,10 +506,11 @@ class NamespaceNode:
 
                 self.pos_start = self.var_name_tok.pos_start
                 self.pos_end = pos_end
+                
 
-# class ArrayTypeNode:
-#         def __init__(self,base_type):
-#                 self.base_type = base_type
+class ArrayTypeNode:
+        def __init__(self,base_type):
+                self.base_type = base_type
 
 class KeyNode:
         def __init__(self,obj_node,key_node):
@@ -622,6 +622,7 @@ class Parser:
                         ))
                 return res
         
+        
         def if_expr(self):
                 res = ParseResult()
                 all_cases = res.register(self.if_expr_cases('if'))
@@ -632,56 +633,6 @@ class Parser:
                 # self.advance()
                 return res.success(IfNode(cases, else_case))
         
-
-        def namespace_expr(self):
-                res = ParseResult()
-                if not self.current_tok.matches(TT_KEYWORD,'namespace'):
-                        return res.failure(InvalidSyntaxError(
-                                self.current_tok.pos_start, self.current_tok.pos_end,
-                                'Expected "namespace"'  
-                        ))
-                
-                res.register_advancement()
-                self.advance()
-                if self.current_tok.type != TT_IDENTIFIER:
-                        return res.failure(InvalidSyntaxError(
-                                self.current_tok.pos_start, self.current_tok.pos_end,
-                                'Expected identifier'
-                        ))  
-
-                var_name_tok = self.current_tok
-                if res.error: return res
-
-                if self.current_tok != TT_LCURLY:
-                        res.register_advancement()
-                        self.advance()   
-
-                if not self.current_tok.type == TT_LCURLY:
-                        # print("nuh uh")
-                        return res.failure(InvalidSyntaxError(
-                                self.current_tok.pos_start, self.current_tok.pos_end,
-                                'Expected "{"'
-                        ))
-                        
-
-                res.register_advancement()
-                self.advance()
-                body = res.register(self.statements())
-                # res.register_advancement()
-                # self.advance()
-                if not self.current_tok.type == TT_RCURLY:
-                        # print("nuh uh")
-                        return res.failure(InvalidSyntaxError(
-                                self.current_tok.pos_start, self.current_tok.pos_end,
-                                'Expected "}"'
-                        ))
-                res.register_advancement()
-                self.advance()
-
-                # if body == None: body = VarAccessNode(Token(TT_IDENTIFIER,"null",pos_start=node.pos_start))
-                return res.success(NamespaceNode(var_name_tok,body,self.current_tok.pos_end))
-
-
         def if_expr_cases(self, case_keyword):
                 res = ParseResult()
                 cases = []
@@ -1056,31 +1007,12 @@ class Parser:
                         self.advance()
                         return res.success(KeyNode(dot_expr,key))
                 return res.success(dot_expr)
-   
-        # def dot_expr(self):
-        #         res = ParseResult()
-        #         atom = res.register(self.atom())
-        #         if res.error: return res
-        #         if self.current_tok.type == TT_DOT:
-        #                 res.register_advancement()
-        #                 self.advance()
-        #                 if self.current_tok.type != TT_IDENTIFIER:
-        #                         return res.failure(InvalidSyntaxError(
-        #                                 self.current_tok.pos_start, self.current_tok.pos_end,
-        #                                 'Expected identifier'
-        #                         ))
-        #                 identifier = self.current_tok
-        #                 res.register_advancement()
-        #                 self.advance()
-        #                 return res.success(KeyNode(atom,StringNode(identifier)))
-        #         else:
-        #                 return res.success(atom)
-
+        
         def dot_expr(self):
                 res = ParseResult()
                 atom = res.register(self.atom())
                 if res.error: return res
-                while self.current_tok.type == TT_DOT:
+                if self.current_tok.type == TT_DOT:
                         res.register_advancement()
                         self.advance()
                         if self.current_tok.type != TT_IDENTIFIER:
@@ -1091,13 +1023,15 @@ class Parser:
                         identifier = self.current_tok
                         res.register_advancement()
                         self.advance()
-                        atom = KeyNode(atom,StringNode(identifier))
-                return res.success(atom)
+                        return res.success(KeyNode(atom,StringNode(identifier)))
+                else:
+                        return res.success(atom)
 
         def call(self):
                 res = ParseResult()
                 key_expr = res.register(self.key_expr())
                 arg_nodes = []
+                print(res.error)
                 if res.error: return res
 
                 if self.current_tok.type == TT_LPAREN:
@@ -1189,6 +1123,108 @@ class Parser:
                                 self.current_tok.pos_end.copy()
                         ))
 
+        # def dot_expr(self):
+        #         return self.bin_op(self.call, (TT_DOT,))
+
+        def call(self):
+                res = ParseResult()
+                atom = res.register(self.atom())
+                arg_nodes = []
+                if res.error: return res
+
+                if self.current_tok.type == TT_LPAREN:
+                        res.register_advancement()
+                        self.advance()
+                        # print(self.current_tok)
+                        if self.current_tok.type == TT_RPAREN:
+                                res.register_advancement()
+                                self.advance()
+                                return res.success(CallNode(atom, arg_nodes))
+                        else:
+                                arg_nodes.append(res.register(self.expr()))
+                                if res.error:
+                                        return res.failure(InvalidSyntaxError(
+                                        self.current_tok.pos_start, self.current_tok.pos_end,
+                                        'Expected ")",  "if", "while" , int, long, double, identifier, "+", "-", "(" or "not"'
+                                        ))
+
+                                while self.current_tok.type == TT_COMMA:
+                                        res.register_advancement()
+                                        self.advance()
+                                        
+                                        arg_nodes.append(res.register(self.expr()))
+                                        if res.error: return res
+
+                                        # if self.current_tok.type != TT_RPAREN:
+                                        #         return res.failure(InvalidSyntaxError(
+                                        #         self.current_tok.pos_start, self.current_tok.pos_end,
+                                        #         f'Expected "," or ")"'
+                                        #         ))
+
+                                        # print()
+                                        # res.register_advancement()
+                                        # self.advance()
+                        # res.register_advancement()
+                        # self.advance()
+                        # print(self.current_tok)
+                        if self.current_tok.type != TT_RPAREN:
+                                                return res.failure(InvalidSyntaxError(
+                                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                                f'Expected "," or ")"'
+                                                ))
+                        # while self.current_tok != TT_EOF and self.tok_idx < len(self.tokens):
+                        #         res.register_advancement()
+                                # self.advance()
+                        # print(key_expr,arg_nodes,self.current_tok)
+                        res.register_advancement()
+                        self.advance()
+                        return res.success(CallNode(atom, arg_nodes))
+                return res.success(atom)
+
+        def list_expr(self):
+                res = ParseResult()
+                element_nodes = []
+                pos_start = self.current_tok.pos_start
+                if self.current_tok.type != TT_LCURLY:
+                        return res.failure(InvalidSyntaxError(
+                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                'Expected "{"'
+                        ))
+                res.register_advancement()
+                self.advance()
+                if self.current_tok.type == TT_RCURLY:
+                        res.register_advancement()
+                        self.advance()
+                else:
+                                element_nodes.append(res.register(self.expr()))
+                                if res.error:
+                                        return res.failure(InvalidSyntaxError(
+                                        self.current_tok.pos_start, self.current_tok.pos_end,
+                                        'Expected "}",  "if", "while" , int, long, double, identifier, "+", "-", "(" or "not"'
+                                        ))
+
+                                while self.current_tok.type == TT_COMMA:
+                                        res.register_advancement()
+                                        self.advance()
+
+                                        element_nodes.append(res.register(self.expr()))
+                                        if res.error: return res
+                                
+                                if self.current_tok.type != TT_RCURLY:
+                                        return res.failure(InvalidSyntaxError(
+                                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                                'Expected "," or "}"'
+                                        ))
+                                
+                                res.register_advancement()
+                                self.advance()
+                                
+                return res.success(ListNode(
+                                element_nodes,
+                                pos_start,
+                                self.current_tok.pos_end.copy()
+                        ))
+
 
         #########################################
         def atom(self): 
@@ -1204,10 +1240,6 @@ class Parser:
                         res.register_advancement()
                         self.advance()
                         return res.success(NumberNode(tok))
-                elif tok.matches(TT_KEYWORD,'namespace'):
-                        namespace_expr = res.register(self.namespace_expr())
-                        if res.error: return res
-                        return res.success(namespace_expr)
                 elif tok.type == TT_STRING:
                         res.register_advancement()
                         self.advance()
@@ -1230,10 +1262,10 @@ class Parser:
                         while_expr = res.register(self.while_expr())
                         if res.error: return res
                         return res.success(while_expr)
-                elif tok.matches(TT_KEYWORD,'while'):
-                        while_expr = res.register(self.while_expr())
+                elif tok.matches(TT_KEYWORD,'namespace'):
+                        namespace_expr = res.register(self.namespace_expr())
                         if res.error: return res
-                        return res.success(while_expr)
+                        return res.success(namespace_expr)
                 elif(tok.type == TT_IDENTIFIER
                      and get(self.tokens,self.tok_idx+1)
                      and get(self.tokens,self.tok_idx+1).type == TT_IDENTIFIER
@@ -1260,7 +1292,56 @@ class Parser:
                                 tok.pos_start, tok.pos_end,
                                 'Expected int, long, double, identifier, "+", "-", "(", "{", "if", "for", or "while"'
                         ))
-        
+
+        def namespace_expr(self):
+                res = ParseResult()
+                if not self.current_tok.matches(TT_KEYWORD,'namespace'):
+                        return res.failure(InvalidSyntaxError(
+                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                'Expected "namespace"'  
+                        ))
+                
+                res.register_advancement()
+                self.advance()
+                if self.current_tok.type != TT_IDENTIFIER:
+                        return res.failure(InvalidSyntaxError(
+                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                'Expected identifier'
+                        ))  
+
+                var_name_tok = self.current_tok
+                if res.error: return res
+
+                if self.current_tok != TT_LCURLY:
+                        res.register_advancement()
+                        self.advance()   
+
+                if not self.current_tok.type == TT_LCURLY:
+                        # print("nuh uh")
+                        return res.failure(InvalidSyntaxError(
+                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                'Expected "{"'
+                        ))
+                        
+
+                res.register_advancement()
+                self.advance()
+                body = res.register(self.statements())
+                # res.register_advancement()
+                # self.advance()
+                if not self.current_tok.type == TT_RCURLY:
+                        # print("nuh uh")
+                        return res.failure(InvalidSyntaxError(
+                                self.current_tok.pos_start, self.current_tok.pos_end,
+                                'Expected "}"'
+                        ))
+                res.register_advancement()
+                self.advance()
+
+                # if body == None: body = VarAccessNode(Token(TT_IDENTIFIER,"null",pos_start=node.pos_start))
+                return res.success(NamespaceNode(var_name_tok,body,self.current_tok.pos_end))
+
+
         def while_expr(self):
                 res = ParseResult()
                 if not self.current_tok.matches(TT_KEYWORD,'while'):
@@ -1370,42 +1451,8 @@ class Parser:
                         expr = res.register(self.expr())
                         if res.error: return res
                         return res.success(SetNode(var_name_tok,expr))
-
-                if(self.current_tok.type == TT_IDENTIFIER 
-                and get(self.tokens,self.tok_idx+1).type == TT_IDENTIFIER
-                and get(self.tokens,self.tok_idx+2).type == TT_EQ):
-                        type_node = self.current_tok
-                        res.register_advancement()
-                        self.advance()
-                        # if self.current_tok.type == TT_EOF:
-                        #         res.register(self.unadvance())
-                        #         return self.atom()
-                        if self.current_tok.type != TT_IDENTIFIER:
-                                return res.failure(InvalidSyntaxError(
-                                        self.current_tok.pos_start, self.current_tok.pos_end,
-                                        "Expected identifier"
-                                ))
-
-                        var_name = self.current_tok
-                        res.register_advancement()
-                        self.advance()
-                        if self.current_tok.type != TT_EQ:
-                                return res.failure(InvalidSyntaxError(
-                                        self.current_tok.pos_start, self.current_tok.pos_end,
-                                        'Expected "="'
-                                ))  
-                        res.register_advancement()
-                        self.advance()
-                        expr = res.register(self.expr())
-                        if res.error: return res
-                        
-                        # res.register_advancement()
-                        # self.advance()
-                        return res.success(VarAssignNode(var_name, expr, type_node))
-                # if(self.current_tok.type == TT_LPAREN):
-                #         return self.call() if temp.error else temp
-                # print(temp.node,temp.error)
                 return temp
+
         def bin_op(self, func_a, ops, func_b=None):
                 if func_b == None:
                         func_b = func_a
@@ -1768,7 +1815,7 @@ class Void(Number):
 class String(Value):
         def __init__(self,value):
                 super().__init__()
-                self.set('value',str(value))
+                self.set('value',prettyPrint(value))
                 self.inherit(StringTable)
         def idx(self,index):
                 try:
@@ -1801,6 +1848,16 @@ class String(Value):
 
         def __repr__(self):
                 return self.get('value')
+        
+        @staticmethod
+        def indexOf(this,char):
+                i = Int(0)
+                while i.get_comparison_lt(this.get('length')()):
+                        i = i.added_to(Int(1))
+                        if repr(this.idx(i)) == repr(char):
+                                return i
+                return myNull
+
    
 class List(Value):
         def __init__(self,elements):
@@ -1840,13 +1897,15 @@ class List(Value):
                 return '{'+str(self.get('elements'))[1:-1]+'}'
 
 class Function(Value):
-        def __init__(self, name, body_node, arg_names, arg_types, return_type):
+        def __init__(self, name, body_node, arg_names, arg_types, return_type, _node=None):
                 super().__init__()
                 self.name = name or "<anonymous>"
+                self.set('name',String(name))
                 self.body_node = body_node
                 self.arg_names = arg_names
                 self.arg_types = arg_types
                 self.return_type = return_type
+                self._node = _node
                 self.inherit(FunctionTable)
 
         def execute(self, args):
@@ -1895,7 +1954,7 @@ class Function(Value):
                         return self.execute(args)
 
         def copy(self):
-                copy = Function(self.name, self.body_node, self.arg_names, self.arg_types, self.return_type)
+                copy = Function(self.name, self.body_node, self.arg_names, self.arg_types, self.return_type, self._node)
                 copy.set_context(self.context)
                 copy.set_pos(self.pos_start, self.pos_end)
                 return copy
@@ -1903,19 +1962,18 @@ class Function(Value):
         def __repr__(self):
                 return f"<function {self.name}>"
 
-def createFunction(f):
-        def function_wrapper(*args):
-                res = RTResult()
-                return res.success(f(*args))
-        return function_wrapper
 
 def createMethod(f):
-        def method_wrapper(this,*args):
+        def _(this,*args):
                 res = RTResult()
                 return res.success(f(this,*args))
-        # print(method_wrapper.__name__)
-        return method_wrapper
+        return _
 
+def createFunction(f):
+        def _(*args):
+                res = RTResult()
+                return res.success(f(*args))
+        return _
 
 
 IntTable = SymbolTable.fromSymbols({'constructor': Int})
@@ -1929,6 +1987,7 @@ StringTable = SymbolTable.fromSymbols({
 
 ListTable = SymbolTable.fromSymbols({'constructor': List})
 FunctionTable = SymbolTable.fromSymbols({'constructor': Function})
+
 
 # def array(T):
 #         class _(Value): pass
@@ -2136,10 +2195,19 @@ class Context:
 #########################################
 class Interpreter:
         def visit(self,node,context):
+                res = ParseResult()
                 method_name = f'visit_{type(node).__name__}'
                 # "visit_BinOpNode"
                 method = getattr(self, method_name, self.no_visit_method)
-                return method(node,context)
+                t = method(node,context)
+                try:
+                        return t
+                except BaseException as ex:
+                        return res.failure(PythonError(
+                                node.pos_start, node.pos_end,
+                                repr(ex),
+                                context
+                        ))
 
         def no_visit_method(self, node, context):
                 raise Exception(f'No visit_{type(node).__name__} method defined')
@@ -2155,8 +2223,7 @@ class Interpreter:
                         elements.append(res.register(self.visit(element_node, context)))
                         if res.error: return res
                 return res.success(List(elements).set_context(context).set_pos(node.pos_start, node.pos_end))
-
-
+        
         def visit_NamespaceNode(self, node, context):
                 res = RTResult()
                 var_name = node.var_name_tok.value
@@ -2170,16 +2237,23 @@ class Interpreter:
                 context.symbol_table.set(var_name,new_context.symbol_table)
                 return res.success(new_context.symbol_table)
 
+                
         def visit_KeyNode(self, node, context):
                 res = RTResult()
                 obj = res.register(self.visit(node.obj_node,context))
                 key = res.register(self.visit(node.key_node,context))
                 # print(obj.symbols)
                 if res.error: return res
-                if (not isinstance(obj,Value) or getattr(obj,'idx',None) == None or isinstance(obj,type)) and not getattr(obj,'get',None):
-                        return res.success(getattr(obj,repr(key),myNull))
-                if type(obj) == SymbolTable:
-                        return res.success(myNull if obj.get(repr(key)) == None else obj.get(repr(key)))
+                if not isinstance(obj,Value) or getattr(obj,'idx',None) == None or isinstance(obj,type):
+                        if  getattr(obj,'get',None) != None:
+                                # print(obj.symbols)
+                                return_value, error = obj.get(repr(key)), None
+                                if return_value == None: return res.success(myNull)
+                                if error: return res.failure(error)
+                                return res.success(return_value)
+                        else:
+                                return res.success(getattr(obj,repr(key),myNull))
+                        
                 # if getattr(obj,'idx',None) == None or isinstance(obj,type):
                 #         return res.failure(RTError(
                 #                 node.key_node.pos_start,                            node.key_node.pos_end,
@@ -2208,6 +2282,7 @@ class Interpreter:
         def visit_VarAccessNode(self,node,context):
                 res = RTResult()
                 var_name = node.var_name_tok.value
+                print(node)
                 value = context.symbol_table.get(var_name)
                 if value == None:
                         return res.failure(RTError(
@@ -2232,7 +2307,7 @@ class Interpreter:
                 return_type = node.type_tok
                 for i in range(0,len(node.arg_name_toks)):
                         arg_types.append(self.visit(VarAccessNode(node.arg_name_toks[i][0]),context).value)
-                func_value = Function(func_name,body_node,arg_names,arg_types,return_type).set_context(context).set_pos(node.pos_start,node.pos_end)
+                func_value = Function(func_name,body_node,arg_names,arg_types,return_type,node).set_context(context).set_pos(node.pos_start,node.pos_end)
                 if currentValue != None and get_type(currentValue) != get_type(func_value):
                         return res.failure(IncompatibleTypesError(
                                 node.pos_start, node.pos_end,
@@ -2245,56 +2320,61 @@ class Interpreter:
 
         def visit_CallNode(self, node, context):
                 res = RTResult()
-                try:
-                        args = []
+                args = []
 
-                        value_to_call = res.register(self.visit(node.node_to_call, context))
+                value_to_call = res.register(self.visit(node.node_to_call, context))
+                if res.error: return res
+                if isinstance(value_to_call,Function):
+                        return_type = res.register(self.visit(VarAccessNode(value_to_call.return_type),context))
+                else:
+                        return_type = None
+                if res.error: return res
+                
+                if isinstance(value_to_call,Function):
+                        value_to_call = value_to_call.copy().set_pos(node.pos_start, node.pos_end)
+
+                for arg_node in node.arg_nodes:
+                        args.append(res.register(self.visit(arg_node, context)))
                         if res.error: return res
-                        if isinstance(value_to_call,Function):
-                                return_type = res.register(self.visit(VarAccessNode(value_to_call.return_type),context))
-                        else:
-                                return_type = None
-                        if res.error: return res
-                        
-                        if isinstance(value_to_call,Function):
-                                value_to_call = value_to_call.copy().set_pos(node.pos_start, node.pos_end)
 
-                        for arg_node in node.arg_nodes:
-                                args.append(res.register(self.visit(arg_node, context)))
-                                if res.error: return res
+                if type(value_to_call) == SymbolTable and value_to_call.get('constructor'):
+                        value_to_call = value_to_call.get('constructor')
 
-                        if type(value_to_call) == SymbolTable:
-                                value_to_call = value_to_call.get('constructor')
-
-                        if type(value_to_call) == type:
-                                return res.success(value_to_call(*args))
-                        elif isFunction(value_to_call):
+                if isFunction(value_to_call) and not isinstance(value_to_call,Function):
+                        try:
+                                if type(value_to_call) == type:
+                                        return res.success(value_to_call(*args))
+                                # print(args,*args)
                                 return_value = res.register(value_to_call(*args))
-                        elif isinstance(value_to_call,Function):
-                                return_value = res.register(value_to_call.execute(args))
-                        else:
-                                return res.failure(RTError(
+                        except BaseException as ex:
+                                return res.failure(PythonError(
                                         node.pos_start, node.pos_end,
-                                        f'{get_display_type(value_to_call)} is not callable',
+                                        repr(ex),
                                         context
                                 ))
-                        if res.error: return res
-                        if return_type and get_type(return_value) != return_type:
-                                        return res.failure(IncompatibleTypesError(
-                                                node.pos_start, node.pos_end,
-                                                f'{get_display_type(return_value)} cannot be converted to {display_name(return_type)}',
-                                                context
-                                        ))
-                        
-                                
-                        return res.success(return_value)
-                except BaseException as ex:
-                        return res.failure(PythonError(
+
+                elif isinstance(value_to_call,Function):
+                        if hasattr(value_to_call,"_node") and value_to_call._node and hasattr(value_to_call._node,"multiline") and value_to_call._node.multiline:
+                                return_value = myNull
+                        else:
+                                return_value = res.register(value_to_call.execute(args))
+                else:
+                        return res.failure(RTError(
                                 node.pos_start, node.pos_end,
-                                repr(ex),
+                                f'{get_display_type(value_to_call)} is not callable',
                                 context
                         ))
+                if res.error: return res
+                if return_type and get_type(return_value) != return_type:
+                                return res.failure(IncompatibleTypesError(
+                                        node.pos_start, node.pos_end,
+                                        f'{get_display_type(return_value)} cannot be converted to {display_name(return_type)}',
+                                        context
+                                ))
+                        
+                return res.success(return_value)
 
+        
         def visit_VarAssignNode(self,node,context):
                 res = RTResult()
                 var_name = node.var_name_tok.value
@@ -2373,14 +2453,14 @@ class Interpreter:
                 left = res.register(self.visit(node.left_node,context))
                 right = res.register(self.visit(node.right_node,context))
                 if res.error: return res
-                if not isinstance(left,SymbolTable):
+                if not isinstance(left,Value):
                         return res.failure(RTError(
                         node.left_node.pos_start, node.right_node.pos_end,
                         'Illegal operation',
                         context
                 ))
 
-                if not isinstance(right,SymbolTable):
+                if not isinstance(right,Value):
                         return res.failure(RTError(
                                 node.left_node.pos_start, node.right_node.pos_end,
                                 'Illegal operation',
@@ -2411,7 +2491,8 @@ class Interpreter:
                         result, error = Boolean(left).anded_by(Boolean(right))
                 elif node.op_tok.matches(TT_KEYWORD,'or'):
                         result, error = Boolean(left).ored_by(Boolean(right))
-                
+                elif node.op_tok.type == TT_DOT:
+                        result = self.visit(KeyNode(left, right),context)
                 if error:
                         return res.failure(error)
 
@@ -2483,8 +2564,7 @@ class Interpreter:
 # TYPES
 #######################################
 def get_type(n):
-        # print( global_symbol_table.get('ns') ==  global_symbol_table.get('ns'))
-        return n._inherit or global_symbol_table.get('ns')
+       return n._inherit
 
 # print(get_type(String("")))
 def display_name(theType):
@@ -2505,8 +2585,6 @@ def display_name(theType):
                 return "string"
         elif theType == get_type(List([])):
                 return "list"
-        elif theType == get_type(ns(List([]))):
-                return "ns"
         else:
                 return None
 
@@ -2515,6 +2593,7 @@ def get_display_type(n):
 
 # def testy(n):
 #         return Int(n)+1
+
 
 def prettyPrint(n):
        t = str(n)
@@ -2529,56 +2608,13 @@ def prettyPrint(n):
                 result = f'{result}{"}"}'
                 return result
        elif isFunction(n) and not isinstance(n,Function):
-               print(n.__name__.lower())
-               return f'<built-in function {n.__name__.lower()}>'
+               return f'<built-in function>'
        else:
                return t
       
-      
-def skink_len(n):
-        res = RTResult()
-        if isinstance(n,String):
-                return res.success(Int(len(n.get('value'))))
-        elif isinstance(n,List):
-                return res.success(Int(len(n.get('elements'))))
-        else:
-                return res.failure(IncompatibleTypesError(
-                        n.pos_start, n.pos_end,
-                        f'a string or list is required (got type {get_display_type(n)})',
-                        n.context
-                ))
-
-def skink_substring(n,a,b=None):
-        res = RTResult()
-        if b == None: b = Int(len(n.get('value')))
-        if not isinstance(a,Int):
-                return res.failure(RTError(
-                        n.pos_start, n.pos_end,
-                        f'slice indices must be integers  (got type {get_display_type(n)})',
-                        n.context
-                ))
-        if not isinstance(b,Int):
-                return res.failure(RTError(
-                        n.pos_start, n.pos_end,
-                        f'slice indices must be integers (got type {get_display_type(n)})',
-                        n.context
-                ))
-        return String(n.get('value')[int(a.get('value')):int(b.get('value'))])
-
-def ns(lst): 
-        # print(lst)
-        # if isinstance(lst,list):
-        #         lst = lst[0]
-        if not isinstance(lst,List):
-                raise Exception()
-        t = SymbolTable(global_symbol_table)
-        t.set('name','<anonymous>')
-        lst = [el.get('elements') for el in lst.get('elements')]
-        for u in lst:
-                t.set(u[0],u[1])
-        # print(t)
-        return t
-
+def skink_substring(this,fromIndex,toIndex=None):
+        if toIndex==None: toIndex = this.get('length')()
+        return String(this.get('value')[int(fromIndex.get('value')):int(toIndex.get('value'))])
 
 # Int.constructor = createFun(lambda a: Int(a))
 # Long.constructor = createFun(lambda a: Long(a))
@@ -2586,12 +2622,25 @@ def ns(lst):
 # Boolean.constructor = createFun(lambda a: Boolean(a))
 # Void.constructor = createFun(lambda: Void())
 # Function.constructor = createFun(lambda: createFun(lambda: run("","void()")))
-
+def ns(lst): 
+        # print(lst)
+        # if isinstance(lst,list):
+        #         lst = lst[0]
+        if not isinstance(lst,List):
+                raise Exception()
+        t = SymbolTable(global_symbol_table)
+        lst = [el.get('elements') for el in lst.get('elements')]
+        for u in lst:
+                t.set(u[0],u[1])
+        t.set('name','<anonymous>')
+        # print(t)
+        return t
 #########################################
 # RUN
 #########################################
 global_symbol_table = SymbolTable()
 global_symbol_table.set('null',myNull)
+global_symbol_table.set('pass',myNull)
 global_symbol_table.set('true',Boolean(True))
 global_symbol_table.set('false',Boolean(False))
 global_symbol_table.set('int',get_type(Int(0)))
@@ -2603,6 +2652,7 @@ global_symbol_table.set('string',get_type(String("")))
 global_symbol_table.set('fn',get_type(Function(None,None,None,None,None)))
 global_symbol_table.set('list',get_type(List([])))
 global_symbol_table.set('ns',createFunction(ns))
+global_symbol_table.set('globals',createFunction(lambda: global_symbol_table))
 
 # print(global_symbol_table.symbols)
 # global_symbol_table.set('print',print)
