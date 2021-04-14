@@ -1,0 +1,27 @@
+def my_copy(f): 
+        # Create a lambda that mimics f
+        g = lambda *args: f(*args)
+        # Add any properties of f
+        t = dir(f)
+        i = 0
+        while i < len(t): 
+            try:
+            	setattr(g,t[i],getattr(f,t[i]))
+            except TypeError as e: 
+                # Catch errors that look like "TypeError: __class__ assignment only supported for heap types or ModuleType subclasses"
+                pass
+
+            i += 1
+        return g
+        
+# Test
+def sqr(x): return x*x
+sqr.foo = 500
+
+sqr_copy = my_copy(sqr)
+sqr_copy.foo = 600
+print(sqr_copy(5)) # -> 25
+print(sqr_copy(6)) # -> 36
+
+print(sqr.foo) # -> 
+print(sqr_copy.foo) # -> 600

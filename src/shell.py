@@ -28,6 +28,7 @@ while True:
     if error:
         print(error.as_string())
     else:
+        # print(result)
         if len(result.get('elements')) == 1:
             print(skink.prettyPrint(result.get('elements')[0]))
         else:
