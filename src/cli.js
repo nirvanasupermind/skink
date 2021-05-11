@@ -9,7 +9,7 @@ if(args.length === 0) {
     console.log('Type "exit" to exit.')
     while(true) {    
         var text = prompt("skink> ");
-        // if(text.replace(/\s*/m, "") === "") continue;
+        if(text.replace(/\s*/m, "") === "") continue;
         if(text === "exit") break;
 
         var [result, error] = skink.run("<anonymous>", text);

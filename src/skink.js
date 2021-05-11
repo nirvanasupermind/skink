@@ -8,6 +8,7 @@ var nightjar = require("nightjar");
 ///////////////////////////////////////
 //CONSTANTS
 ///////////////////////////////////////
+var DEFAULT_MAX_LENGTH = 80;
 var DIGITS = "0123456789";
 
 
@@ -22,7 +23,7 @@ function BaseError(pos_start, pos_end, error_name, details) {
 }
 
 BaseError.prototype.toString = function () {
-    var result = this.pos_start.fn+":"+(this.pos_start.ln+1)+":"+(this.pos_start.col+1)+": "+ this.error_name + ": " + this.details;
+    var result = this.pos_start.fn + ":" + (this.pos_start.ln + 1) + ":" + (this.pos_start.col + 1) + ": " + this.error_name + ": " + this.details;
     return result;
 }
 
@@ -40,10 +41,197 @@ function InvalidSyntaxError(pos_start, pos_end, details) {
 
 util.inherits(InvalidSyntaxError, BaseError);
 
+function RTError(pos_start, pos_end, details, context) {
+    // console.log(pos_start, pos_end)
+    BaseError.call(this, pos_start, pos_end, "Runtime Error", details);
+    this.context = context;
+}
+
+util.inherits(RTError, BaseError);
+RTError.prototype.toString = function () {
+    var result = this.generate_traceback();
+    result += "\n" + this.pos_start.fn + ":" + (this.pos_start.ln + 1) + ":" + (this.pos_start.col + 1) + ": " + this.error_name + ": " + this.details;
+    return result;
+}
+
+RTError.prototype.generate_traceback = function () {
+    var result = "";
+    var pos = this.pos_start;
+    var ctx = this.context;
+
+    while(ctx) {
+        result = `\tFile ${pos.fn}, line ${pos.ln + 1}, in ${ctx.display_name}\n` + result;
+        pos = ctx.parent_entry_pos;;
+        ctx = ctx.parent;
+    }
+
+    return "Traceback (most recent call last):\n"+result;
+}
+
 
 ///////////////////////////////////////
 //UTILITY FUNCTIONS
 ///////////////////////////////////////
+function isNumber(a) { return typeof a === "number"; }
+function toNumber(a) { return isNumber(a) ? a : parseFloat(a); }
+
+function cons(a, b) {
+    var t = add(a.value, b.value).constructor;
+
+    if(t === nightjar.Int32) return Integer;
+    if(t === nightjar.Int64) return Long;
+
+    return Double;
+}
+function add(a, b) {
+    if (isNumber(a) || isNumber(b)) {
+        return toNumber(a) + toNumber(b);
+    } else if (b instanceof nightjar.Int64) {
+        return b.add(a);
+    } else {
+        return a.add(b);
+    }
+}
+
+function sub(a, b) {
+    if (isNumber(a) || isNumber(b)) {
+        return toNumber(a) - toNumber(b);
+    } else if (b instanceof nightjar.Int64) {
+        return b.sub(a).neg();
+    } else {
+        return a.sub(b);
+    }
+}
+
+function mul(a, b) {
+    if (isNumber(a) || isNumber(b)) {
+        return toNumber(a) * toNumber(b);
+    } else if (b instanceof nightjar.Int64) {
+        return b.mul(a);
+    } else {
+        return a.mul(b);
+    }
+}
+
+function div(a, b) {
+    if (isNumber(a) || isNumber(b)) {
+        return toNumber(a) / toNumber(b);
+    } else if (b instanceof nightjar.Int64) {
+        return nightjar.Int64(a).div(b);
+    } else {
+        return a.div(b);
+    }
+}
+
+
+function neg(a) {
+    if (isNumber(a)) {
+        return -a;
+    } else {
+        return a.neg();
+    }
+}
+
+
+
+//taken from https://stackoverflow.com/questions/13861254/json-stringify-deep-objects
+// This is based on Douglas Crockford's code ( https://github.com/douglascrockford/JSON-js/blob/master/json2.js )
+(function () {
+    'use strict';
+
+    var DEFAULT_MAX_DEPTH = 6;
+    var DEFAULT_ARRAY_MAX_LENGTH = 50;
+    var seen; // Same variable used for all stringifications
+
+    Date.prototype.toPrunedJSON = Date.prototype.toJSON;
+    String.prototype.toPrunedJSON = String.prototype.toJSON;
+
+    var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+        escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+        meta = {    // table of character substitutions
+            '\b': '\\b',
+            '\t': '\\t',
+            '\n': '\\n',
+            '\f': '\\f',
+            '\r': '\\r',
+            '"': '\\"',
+            '\\': '\\\\'
+        };
+
+    function quote(string) {
+        escapable.lastIndex = 0;
+        return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
+            var c = meta[a];
+            return typeof c === 'string'
+                ? c
+                : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+        }) + '"' : '"' + string + '"';
+    }
+
+    function str(key, holder, depthDecr, arrayMaxLength) {
+        var i,          // The loop counter.
+            k,          // The member key.
+            v,          // The member value.
+            length,
+            partial,
+            value = holder[key];
+        if (value && typeof value === 'object' && typeof value.toPrunedJSON === 'function') {
+            value = value.toPrunedJSON(key);
+        }
+
+        switch (typeof value) {
+            case 'string':
+                return quote(value);
+            case 'number':
+                return isFinite(value) ? String(value) : 'null';
+            case 'boolean':
+            case 'null':
+                return String(value);
+            case 'object':
+                if (!value) {
+                    return 'null';
+                }
+                if (depthDecr <= 0 || seen.indexOf(value) !== -1) {
+                    return '"-pruned-"';
+                }
+                seen.push(value);
+                partial = [];
+                if (Object.prototype.toString.apply(value) === '[object Array]') {
+                    length = Math.min(value.length, arrayMaxLength);
+                    for (i = 0; i < length; i += 1) {
+                        partial[i] = str(i, value, depthDecr - 1, arrayMaxLength) || 'null';
+                    }
+                    v = partial.length === 0
+                        ? '[]'
+                        : '[' + partial.join(',') + ']';
+                    return v;
+                }
+                for (k in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, k)) {
+                        try {
+                            v = str(k, value, depthDecr - 1, arrayMaxLength);
+                            if (v) partial.push(quote(k) + ':' + v);
+                        } catch (e) {
+                            // this try/catch due to some "Accessing selectionEnd on an input element that cannot have a selection." on Chrome
+                        }
+                    }
+                }
+                v = partial.length === 0
+                    ? '{}'
+                    : '{' + partial.join(',') + '}';
+                return v;
+        }
+    }
+
+    JSON.pruned = function (value, depthDecr, arrayMaxLength) {
+        seen = [];
+        depthDecr = depthDecr || DEFAULT_MAX_DEPTH;
+        arrayMaxLength = arrayMaxLength || DEFAULT_ARRAY_MAX_LENGTH;
+        return str('', { '': value }, depthDecr, arrayMaxLength);
+    };
+
+}());
+
 function or(items) {
     var t = items.map(quote);
     return t.slice(0, -1).join(", ") + " or " + t[t.length - 1]
@@ -228,7 +416,7 @@ Lexer.prototype.generate_number = function () {
 
 
     if (dot_count === 1) {
-        return new Token(TokenType.DOUBLE, parseFloat(num_str), pos_start, this.pos);
+        return new Token(TokenType.DOUBLE, toNumber(num_str), pos_start, this.pos);
     } else if (l_count === 1) {
         return new Token(TokenType.LONG, nightjar.Int64(num_str), pos_start, this.pos);
     } else {
@@ -270,7 +458,7 @@ function UnaryOpNode(op_tok, node) {
 }
 
 UnaryOpNode.prototype.toString = function () {
-    return "(" + this.op_tok + ", "+this.node+")";
+    return "(" + this.op_tok + ", " + this.node + ")";
 }
 
 ///////////////////////////////////////
@@ -278,7 +466,7 @@ UnaryOpNode.prototype.toString = function () {
 ///////////////////////////////////////
 function ParseResult() {
     this.error = null;
-    this.node = null;
+    this.value = null;
 }
 
 ParseResult.prototype.register = function (res) {
@@ -299,7 +487,6 @@ ParseResult.prototype.failure = function (error) {
     this.error = error;
     return this;
 }
-
 
 ///////////////////////////////////////
 //PARSER
@@ -337,16 +524,16 @@ Parser.prototype.atom = function () {
     var res = new ParseResult();
 
     var tok = this.current_tok;
-    if(tok.type === TokenType.MINUS) {
+    if (tok.type === TokenType.MINUS) {
         res.register(this.advance());
         var atom = res.register(this.atom());
 
         return res.success(new UnaryOpNode(tok, atom));
-    } else if(tok.type === TokenType.LPAREN) {
+    } else if (tok.type === TokenType.LPAREN) {
         res.register(this.advance());
         var expr = res.register(this.expr());
 
-        if(this.current_tok.type !== TokenType.RPAREN) {
+        if (this.current_tok.type !== TokenType.RPAREN) {
             return res.failure(new InvalidSyntaxError(
                 this.current_tok.pos_start, this.current_tok.pos_end,
                 'Expected ")"'
@@ -354,6 +541,7 @@ Parser.prototype.atom = function () {
         }
 
         res.register(this.advance());
+        // console.log(expr.pos_start.idx)
         return res.success(expr);
     } else if ([TokenType.INT, TokenType.LONG, TokenType.DOUBLE].includes(tok.type)) {
         res.register(this.advance());
@@ -371,9 +559,9 @@ Parser.prototype.term = function () {
 }
 
 Parser.prototype.expr = function () {
-    if(this.current_tok.type === TokenType.EOF) {
+    if (this.current_tok.type === TokenType.EOF) {
         var res = new ParseResult();
-    return res.success(null);
+        return res.success(null);
     }
 
 
@@ -399,6 +587,258 @@ Parser.prototype.bin_op = function (func, ops) {
 }
 
 ///////////////////////////////////////
+//VALUES
+///////////////////////////////////////
+function BaseObject(parent = object_meta) {
+    // console.log(this)
+    this.keys = [];
+    this.values = [];
+    this.parent = parent;
+    this.set_pos();
+    this.set_context();
+}
+
+BaseObject.prototype.set_context = function (context=null) {
+    this.context = context;
+    return this;
+}
+
+BaseObject.prototype.set_pos = function (pos_start=null, pos_end=null) {
+    this.pos_start = pos_start;
+    this.pos_end = pos_end;
+
+    return this;
+}
+BaseObject.prototype.set = function (key, value) {
+    var index = this.keys.indexOf(JSON.pruned(key));
+    if (index === -1) {
+        this.keys.push(JSON.pruned(key));
+        this.values.push(value);
+    } else {
+        this.values[index] = value;
+    }
+}
+
+BaseObject.prototype.get = function (key) {
+    var index = this.keys.indexOf(JSON.pruned(key));
+    if (index === -1 && this.parent) return this.parent.get(key);
+    return this.keys[index];
+}
+
+
+BaseObject.prototype.exists = function (key) {
+    var index = this.keys.indexOf(JSON.pruned(key));
+    return index > -1;
+}
+
+BaseObject.prototype.toString = function () {
+    if (this.keys.length >= DEFAULT_MAX_LENGTH) {
+        return [
+            "{",
+            this.keys.slice(0, DEFAULT_MAX_LENGTH).map((el, i) => JSON.parse(el) + "=" + JSON.parse(values[i])).join(", "),
+            "...}"
+        ].join("");
+    } else {
+        return "{" + this.keys.map((el, i) => JSON.parse(el) + "=" + JSON.parse(values[i])).join(", ") + "}";
+    }
+}
+
+var object_meta = new BaseObject(null);
+var num_meta = new BaseObject(object_meta);
+var int_meta = new BaseObject(num_meta);
+var long_meta = new BaseObject(num_meta);
+var double_meta = new BaseObject(num_meta);
+
+
+function Num(value) {
+    BaseObject.call(this, num_meta);
+    this.value = value;   
+}
+
+util.inherits(Num, BaseObject);
+
+
+Num.prototype.add = function (other) {
+    if(other instanceof Num) {
+        return [new (cons(this, other))(add(this.value, other.value)), null];
+    }
+}
+
+Num.prototype.sub = function (other) {
+    if(other instanceof Num) {
+        return [new (cons(this, other))(sub(this.value, other.value)),null];
+    }
+}
+
+Num.prototype.mul = function (other) {
+    if(other instanceof Num) {
+        return [new (cons(this, other))(mul(this.value, other.value)), null];
+    }
+}
+
+Num.prototype.div = function (other) {
+    if(other instanceof Num) {
+        if(other.value.toString() === "0" && !isNumber(other.value)) {
+            return [null, new RTError(
+                other.pos_start,
+                other.pos_end,
+                "integer division by zero",
+                this.context
+            )];
+        }
+
+        return [new (cons(this, other))(div(this.value, other.value)), null];
+    }
+}
+
+Num.prototype.neg = function () {
+    return [new (this.constructor)(neg(this.value)), null];
+}
+
+Num.prototype.toString = function () { return this.value.toString(); }
+
+
+
+function Integer(value) {
+    Num.call(this, nightjar.Int32(value));
+    this.parent = int_meta;
+}
+
+util.inherits(Integer, Num);
+
+function Long(value) {
+    Num.call(this, nightjar.Int64(value));
+    this.parent = long_meta;
+}
+
+util.inherits(Long, Num);
+
+function Double(value) {
+    Num.call(this, toNumber(value));
+    this.parent = double_meta;
+}
+
+util.inherits(Double, Num);
+
+
+///////////////////////////////////////
+//RUNTIME RESULT
+///////////////////////////////////////
+function RTResult() {
+    this.error = null;
+    this.value = null;
+}
+
+RTResult.prototype.register = function (res) {
+    if (res instanceof RTResult) {
+        if (res.error) this.error = res.error;
+        return res.value;
+    }
+
+    return res;
+}
+
+RTResult.prototype.success = function (value) {
+    this.value = value;
+    return this;
+}
+
+RTResult.prototype.failure = function (error) {
+    this.error = error;
+    return this;
+}
+
+///////////////////////////////////////
+//CONTEXT
+///////////////////////////////////////
+function Context(display_name, parent=null, parent_entry_pos=null) {
+    this.display_name = display_name;
+    this.parent = parent;
+    this.parent_entry_pos = parent_entry_pos;
+}
+
+///////////////////////////////////////
+//INTERPRETER
+///////////////////////////////////////
+function Interpreter() {}
+Interpreter.prototype.visit = function (context, node) {
+    //visit_BinOpNode
+    var method_name = "visit_"+node.constructor.name;
+    var method = this[method_name] || this.no_visit_method;
+    return method.call(this, context, node);
+}
+
+Interpreter.prototype.no_visit_method = function (context, node) {
+    var method_name = "visit_"+node.constructor.name;
+    throw new Error("no visit method defined "+method_name);
+}
+
+Interpreter.prototype.visit_NumberNode = function (context, node) {
+    var res = new RTResult();
+    if(node.tok.type === TokenType.INT) {
+        return res.success(
+           new Integer(node.tok.value)
+               .set_pos(node.tok.pos_start, node.tok.pos_end)
+               .set_context(context)
+        );
+    } else if(node.tok.type === TokenType.LONG) {
+        return res.success(
+            new Long(node.tok.value)
+                .set_pos(node.tok.pos_start, node.tok.pos_end)
+                .set_context(context)
+        );
+    } else {
+        return res.success(
+            new Double(node.tok.value)
+                .set_pos(node.tok.pos_start, node.tok.pos_end)
+                .set_context(context)
+        );
+    }
+}
+
+Interpreter.prototype.visit_BinOpNode = function (context, node) {
+    var res = new RTResult();
+
+    var left = res.register(this.visit(context, node.left_node));
+    var right = res.register(this.visit(context, node.right_node));
+
+    if(res.error) return res;
+
+    // console.log(left.toString(),right.toString())
+    var result, error;
+    if(node.op_tok.type === TokenType.PLUS) {
+        [result, error] = left.add(right);
+    } else if(node.op_tok.type === TokenType.MINUS) {
+        [result, error] = left.sub(right);
+    } else if(node.op_tok.type === TokenType.MUL) {
+        [result, error] = left.mul(right);
+    } else {
+        [result, error] = left.div(right);
+    }
+
+    if(error) return res.failure(error);
+    return res.success(result.set_pos(node.pos_start, node.pos_end).set_context(context));
+}
+
+Interpreter.prototype.visit_UnaryOpNode = function (context, node) {
+    var res = new RTResult();
+
+    var number = res.register(this.visit(context, node.node));
+    if(res.error) return res;
+    
+    var error;
+
+    if(node.op_tok.type === TokenType.MINUS) {
+        [number, error] = number.neg();
+    }
+
+    if(error) return res.failure(error);
+    return res.success(number.set_pos(node.pos_start, node.pos_end).set_context(context));
+}
+
+
+
+///////////////////////////////////////
 //RUN
 ///////////////////////////////////////
 function run(fn, text) {
@@ -409,12 +849,23 @@ function run(fn, text) {
 
     //Generate AST
     var parser = new Parser(tokens);
-    var res = parser.parse();
+    var ast = parser.parse();
+    if(ast.error) return [null, ast.error];
 
-    return [res.node, res.error];
+    //Run program
+    var interpreter = new Interpreter();
+    var context = new Context("<program>");
+
+    var result = interpreter.visit(context, ast.node);
+
+    return [result.value, result.error];
+
 }
+
+
 
 function skink(file) { return; }
 skink.run = run;
+
 
 module.exports = skink;
