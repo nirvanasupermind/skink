@@ -1,0 +1,86 @@
+include "skink:Math";
+include "myna";
+
+//Code based on: https://github.com/Nexysweb/math-ts/blob/master/src/lib/complex.ts
+module Complex {
+    Complex new(double x, double y) {
+        return {"x"=x, "y"=y, "proto"=Complex};
+    }
+
+    double fromModAndPhase(double mod, double phase) {
+        const double x = Math.sin(phase) * mod;
+        const double y = Math.cos(phase) * mod;
+        
+        return Complex.new(x, y);
+    } 
+
+    Complex multiply(Complex this, Complex c) { 
+        const double x1 = c.x * this.x;
+        const double y1 = c.x * this.y;
+        const double y2 = c.y * this.x;
+        const double x2 = c.y * this.y;
+
+        return Complex.new(x1 - x2, y1 + y2);
+    }
+
+    Complex sum(Complex this, Complex c) {
+        return Complex.new(c.x + this.x, c.y + this.y);
+    }
+
+    double modulus(Complex this) {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+
+    double argument(Complex this) {
+        return Math.atan(this.y / this.x);
+    }
+
+    Complex conjugate(Complex this) {
+        return Complex.new(this.x, -this.y);
+    }
+}
+
+
+Complex Complex::pow(double n) {
+    const double r = this.modulus();
+    const double arg = this.argument();
+
+    const double rn = Math.pow(r, n);
+
+    const double x = rn * Math.cos(n * arg);
+    const double y = rn * Math.sin(n * arg);
+
+    return Complex.new(x, y);
+}
+
+////////////////////////////////////////
+//Code based on: https://github.com/cdiggins/myna-parser/blob/master/grammars/grammar_glsl.js
+// Setup a shorthand for the Myna parsing library object
+module m = myna;
+
+module glsl {
+    // Comments and whitespace 
+    m.Rule untilEol = m.advanceWhileNot(m.newLine).then(m.newLine.opt());
+    m.Rule fullComment = m.seq("/*", m.advanceUntilPast("*/"));
+    m.Rule lineComment = m.seq("//", untilEol);
+    m.Rule comment = fullComment.or(lineComment);
+    m.Rule ws = comment.or(m.atWs.then(m.advance)).zeroOrMore();
+
+    // Helpers
+    m.Rule eos = m.text(";").then(ws);
+    m.Rule comma = m.char(",").then(ws);
+
+    m.Rule commaDelimited(m.Rule rule) {
+        return m.delimited(rule, comma);
+    }
+
+    // Recursive definition of an expression
+    m.Rule expr = m.delay(<void>() { return expr1; }).ast();
+
+    // Recursive definition of a statement
+    m.Rule recStatement = m.delay(<void>() { return statement; }).ast();
+    
+    // Literals
+    m.Rule fraction = m.seq(".", m.digit.zeroOrMore());
+}
+

@@ -1,0 +1,24 @@
+using "std:UInt";
+namespace BigInt {
+    void new(BigInt this, string str) {
+        bool flipflag = false;
+        if(str.charAt(0) === "-") {
+            flipflag = true;
+        }
+
+        int i = 0;
+        while(i < str.length 
+                && str.charAt(i) === 0) {
+            i += 1;
+        }
+
+        this.d = s.substring(i);
+        this.s = if(flipflag) { 1 } else { 2 };
+    }
+
+    BigInt neg(BigInt this) {
+        return BigInt.new(this.d, -this.s);
+    }
+}
+
+out.println(-BigInt.new(100));

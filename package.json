@@ -23,5 +23,9 @@
   "bugs": {
     "url": "https://github.com/nirvanasupermind/skink/issues"
   },
-  "homepage": "https://github.com/nirvanasupermind/skink#readme"
+  "homepage": "https://github.com/nirvanasupermind/skink#readme",
+  "dependencies": {
+    "nightjar": "^0.1.2",
+    "prompt-sync": "^4.2.0"
+  }
 }
