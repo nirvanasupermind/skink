@@ -3,6 +3,7 @@
 "use strict";
 
 var util = require("util");
+var fs = require("fs");
 var nightjar = require("nightjar");
 
 ///////////////////////////////////////
@@ -10,7 +11,9 @@ var nightjar = require("nightjar");
 ///////////////////////////////////////
 var DEFAULT_MAX_LENGTH = 80;
 var DIGITS = "0123456789";
-
+var VOWELS = "aeiou";
+var LETTERS = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+var LETTERS_DIGITS = LETTERS + DIGITS;
 
 ///////////////////////////////////////
 //ERRORS
@@ -49,8 +52,8 @@ function RTError(pos_start, pos_end, details, context) {
 
 util.inherits(RTError, BaseError);
 RTError.prototype.toString = function () {
-    var result = this.generate_traceback();
-    result += "\n" + this.pos_start.fn + ":" + (this.pos_start.ln + 1) + ":" + (this.pos_start.col + 1) + ": " + this.error_name + ": " + this.details;
+    var result = this.pos_start.fn + ":" + (this.pos_start.ln + 1) + ":" + (this.pos_start.col + 1) + ": " + this.error_name + ": " + this.details;
+    result += "\n" + this.generate_traceback();
     return result;
 }
 
@@ -59,13 +62,14 @@ RTError.prototype.generate_traceback = function () {
     var pos = this.pos_start;
     var ctx = this.context;
 
-    while(ctx) {
-        result = `\tFile ${pos.fn}, line ${pos.ln + 1}, in ${ctx.display_name}\n` + result;
+    while (ctx) {
+        result += "\t" + pos.fn + ":" + (pos.ln + 1) + ":" + (pos.col + 1) + ": in " + ctx.display_name
         pos = ctx.parent_entry_pos;;
         ctx = ctx.parent;
     }
 
-    return "Traceback (most recent call last):\n"+result;
+
+    return "Stack traceback:\n" + result;
 }
 
 
@@ -78,8 +82,8 @@ function toNumber(a) { return isNumber(a) ? a : parseFloat(a); }
 function cons(a, b) {
     var t = add(a.value, b.value).constructor;
 
-    if(t === nightjar.Int32) return Integer;
-    if(t === nightjar.Int64) return Long;
+    if (t === nightjar.Int32) return Integer;
+    if (t === nightjar.Int64) return Long;
 
     return Double;
 }
@@ -232,12 +236,8 @@ function neg(a) {
 
 }());
 
-function or(items) {
-    var t = items.map(quote);
-    return t.slice(0, -1).join(", ") + " or " + t[t.length - 1]
-}
 
-function or1(items) {
+function or(items) {
     return items.slice(0, -1).join(", ") + " or " + items[items.length - 1];
 }
 
@@ -305,19 +305,24 @@ var TokenType = buildSet([
     "INT",
     "LONG",
     "DOUBLE",
+    "IDENTIFIER",
+    "KEYWORD",
     "PLUS",
     "MINUS",
     "MUL",
     "DIV",
+    "EQ",
     "LPAREN",
     "RPAREN",
+    "NEWLINE",
     "EOF"
 ]);
 
+var KEYWORDS = [];
 
 
 function Token(type_, value = null, pos_start = null, pos_end = null) {
-    if (pos_end === null) pos_end = pos_start !== null ? pos_start + 1 : null;
+    if (pos_end === null) pos_end = pos_start !== null ? clone(pos_start).advance() : null;
 
     this.type = type_;
     this.value = value;
@@ -354,8 +359,13 @@ Lexer.prototype.generate_tokens = function () {
     while (this.current_char !== null) {
         if (" \t".includes(this.current_char)) {
             this.advance();
+        } else if (";\n\r".includes(this.current_char)) {
+            tokens.push(new Token(TokenType.NEWLINE, null, this.pos));
+            this.advance();
         } else if (DIGITS.includes(this.current_char)) {
             tokens.push(this.generate_number());
+        } else if (LETTERS.includes(this.current_char)) {
+            tokens.push(this.generate_identifier());
         } else if (this.current_char === "+") {
             tokens.push(new Token(TokenType.PLUS, null, this.pos));
             this.advance();
@@ -367,6 +377,9 @@ Lexer.prototype.generate_tokens = function () {
             this.advance();
         } else if (this.current_char === "/") {
             tokens.push(new Token(TokenType.DIV, null, this.pos));
+            this.advance();
+        } else if (this.current_char === "=") {
+            tokens.push(new Token(TokenType.EQ, null, this.pos));
             this.advance();
         } else if (this.current_char === "(") {
             tokens.push(new Token(TokenType.LPAREN, null, this.pos));
@@ -424,6 +437,17 @@ Lexer.prototype.generate_number = function () {
     }
 }
 
+Lexer.prototype.generate_identifier = function () {
+    var id_str = "";
+    var pos_start = clone(this.pos);
+    while (this.current_char !== null && LETTERS_DIGITS.includes(this.current_char)) {
+        id_str += this.current_char;
+        this.advance();
+    }
+
+    var tok_type = KEYWORDS.includes(id_str) ? TokenType.KEYWORD : TokenType.IDENTIFIER;
+    return new Token(tok_type, id_str, pos_start, this.pos);
+}
 ///////////////////////////////////////
 //NODES
 ///////////////////////////////////////
@@ -436,7 +460,6 @@ function NumberNode(tok) {
 NumberNode.prototype.toString = function () { return this.tok.toString(); }
 
 function BinOpNode(left_node, op_tok, right_node) {
-    // console.log(left_node, op_tok, right_node)
     this.left_node = left_node;
     this.op_tok = op_tok;
     this.right_node = right_node;
@@ -459,6 +482,17 @@ function UnaryOpNode(op_tok, node) {
 
 UnaryOpNode.prototype.toString = function () {
     return "(" + this.op_tok + ", " + this.node + ")";
+}
+
+function MultilineNode(lines, pos_start, pos_end) {
+    this.lines = lines;
+    this.pos_start = pos_start;
+    this.pos_end = pos_end;
+}
+
+function EmptyNode(pos_start) {
+    this.pos_start = pos_start;
+    this.pos_end = pos_start;
 }
 
 ///////////////////////////////////////
@@ -507,7 +541,7 @@ Parser.prototype.advance = function () {
 }
 
 Parser.prototype.parse = function () {
-    var res = this.expr();
+    var res = this.file();
 
 
     if (!res.error && this.current_tok.type !== TokenType.EOF) {
@@ -523,10 +557,12 @@ Parser.prototype.parse = function () {
 Parser.prototype.atom = function () {
     var res = new ParseResult();
 
+
     var tok = this.current_tok;
-    if (tok.type === TokenType.MINUS) {
+    if ([TokenType.PLUS, TokenType.MINUS].includes(tok.type)) {
         res.register(this.advance());
         var atom = res.register(this.atom());
+        if (res.error) return res;
 
         return res.success(new UnaryOpNode(tok, atom));
     } else if (tok.type === TokenType.LPAREN) {
@@ -541,7 +577,6 @@ Parser.prototype.atom = function () {
         }
 
         res.register(this.advance());
-        // console.log(expr.pos_start.idx)
         return res.success(expr);
     } else if ([TokenType.INT, TokenType.LONG, TokenType.DOUBLE].includes(tok.type)) {
         res.register(this.advance());
@@ -549,7 +584,7 @@ Parser.prototype.atom = function () {
     } else {
         return res.failure(new InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            "Unexpected end of input"
+            "Expected " + or(["int", "long", "double", "identifier", '"+"', '"-"', '"("'])
         ))
     }
 }
@@ -559,14 +594,38 @@ Parser.prototype.term = function () {
 }
 
 Parser.prototype.expr = function () {
-    if (this.current_tok.type === TokenType.EOF) {
+    if (this.current_tok.type === TokenType.EOF || this.current_tok.type === TokenType.NEWLINE) {
         var res = new ParseResult();
-        return res.success(null);
+        return res.success(new EmptyNode(this.pos_start));
     }
-
 
     return this.bin_op(this.term, [TokenType.PLUS, TokenType.MINUS]);
 }
+
+Parser.prototype.file = function () {
+    var res = new ParseResult();
+    var pos_start = this.current_tok.pos_start;
+    var first_line = res.register(this.expr());
+    if (res.error) return res;
+
+    var lines = [first_line];
+    while (this.current_tok.type === TokenType.NEWLINE) {
+        res.register(this.advance());
+        var pos = this.current_tok.pos_start;
+        if (this.current_tok.type === TokenType.NEWLINE) {
+            lines.push(new EmptyNode(pos));
+        } else {
+
+            var line = res.register(this.expr());
+            if (res.error) return res;
+
+            lines.push(line);
+        }
+    }
+
+    return res.success(new MultilineNode(lines, pos_start, this.current_tok.pos_end))
+}
+
 
 Parser.prototype.bin_op = function (func, ops) {
     var res = new ParseResult();
@@ -598,12 +657,12 @@ function BaseObject(parent = object_meta) {
     this.set_context();
 }
 
-BaseObject.prototype.set_context = function (context=null) {
+BaseObject.prototype.set_context = function (context = null) {
     this.context = context;
     return this;
 }
 
-BaseObject.prototype.set_pos = function (pos_start=null, pos_end=null) {
+BaseObject.prototype.set_pos = function (pos_start = null, pos_end = null) {
     this.pos_start = pos_start;
     this.pos_end = pos_end;
 
@@ -644,45 +703,51 @@ BaseObject.prototype.toString = function () {
 }
 
 var object_meta = new BaseObject(null);
+var namespace_meta = new BaseObject(object_meta);
 var num_meta = new BaseObject(object_meta);
 var int_meta = new BaseObject(num_meta);
 var long_meta = new BaseObject(num_meta);
 var double_meta = new BaseObject(num_meta);
 
+function Namespace(parent = namespace_meta) {
+    BaseObject.call(this, parent);
+}
+
+util.inherits(Namespace, BaseObject);
 
 function Num(value) {
     BaseObject.call(this, num_meta);
-    this.value = value;   
+    this.value = value;
 }
 
 util.inherits(Num, BaseObject);
 
 
 Num.prototype.add = function (other) {
-    if(other instanceof Num) {
+    if (other instanceof Num) {
         return [new (cons(this, other))(add(this.value, other.value)), null];
     }
 }
 
 Num.prototype.sub = function (other) {
-    if(other instanceof Num) {
-        return [new (cons(this, other))(sub(this.value, other.value)),null];
+    if (other instanceof Num) {
+        return [new (cons(this, other))(sub(this.value, other.value)), null];
     }
 }
 
 Num.prototype.mul = function (other) {
-    if(other instanceof Num) {
+    if (other instanceof Num) {
         return [new (cons(this, other))(mul(this.value, other.value)), null];
     }
 }
 
 Num.prototype.div = function (other) {
-    if(other instanceof Num) {
-        if(other.value.toString() === "0" && !isNumber(other.value)) {
+    if (other instanceof Num) {
+        if (other.value.toString() === "0" && !isNumber(other.value)) {
             return [null, new RTError(
                 other.pos_start,
                 other.pos_end,
-                "integer division by zero",
+                "attempt to divide by zero",
                 this.context
             )];
         }
@@ -730,6 +795,7 @@ function RTResult() {
 }
 
 RTResult.prototype.register = function (res) {
+    // console.log("!!!!")
     if (res instanceof RTResult) {
         if (res.error) this.error = res.error;
         return res.value;
@@ -751,7 +817,7 @@ RTResult.prototype.failure = function (error) {
 ///////////////////////////////////////
 //CONTEXT
 ///////////////////////////////////////
-function Context(display_name, parent=null, parent_entry_pos=null) {
+function Context(display_name, parent = null, parent_entry_pos = null) {
     this.display_name = display_name;
     this.parent = parent;
     this.parent_entry_pos = parent_entry_pos;
@@ -760,28 +826,46 @@ function Context(display_name, parent=null, parent_entry_pos=null) {
 ///////////////////////////////////////
 //INTERPRETER
 ///////////////////////////////////////
-function Interpreter() {}
+function Interpreter() { }
 Interpreter.prototype.visit = function (context, node) {
     //visit_BinOpNode
-    var method_name = "visit_"+node.constructor.name;
+    var method_name = "visit_" + node.constructor.name;
     var method = this[method_name] || this.no_visit_method;
     return method.call(this, context, node);
 }
 
 Interpreter.prototype.no_visit_method = function (context, node) {
-    var method_name = "visit_"+node.constructor.name;
-    throw new Error("no visit method defined "+method_name);
+    var method_name = "visit_" + node.constructor.name;
+    throw new Error("no visit method defined " + method_name);
+}
+
+Interpreter.prototype.visit_EmptyNode = function (node) {
+    return new RTResult().success(null);
+}
+
+Interpreter.prototype.visit_MultilineNode = function (context, node) {
+    var res = new RTResult();
+    var tmp = [];
+    for (var i = 0; i < node.lines.length; i++) {
+        if (i >= 1 && node.lines[i] instanceof EmptyNode) continue;
+        var result = res.register(this.visit(context, node.lines[i]));
+        if (res.error) return res;
+        tmp.push(result);
+    }
+
+
+    return res.success(tmp.pop());
 }
 
 Interpreter.prototype.visit_NumberNode = function (context, node) {
     var res = new RTResult();
-    if(node.tok.type === TokenType.INT) {
+    if (node.tok.type === TokenType.INT) {
         return res.success(
-           new Integer(node.tok.value)
-               .set_pos(node.tok.pos_start, node.tok.pos_end)
-               .set_context(context)
+            new Integer(node.tok.value)
+                .set_pos(node.tok.pos_start, node.tok.pos_end)
+                .set_context(context)
         );
-    } else if(node.tok.type === TokenType.LONG) {
+    } else if (node.tok.type === TokenType.LONG) {
         return res.success(
             new Long(node.tok.value)
                 .set_pos(node.tok.pos_start, node.tok.pos_end)
@@ -802,21 +886,21 @@ Interpreter.prototype.visit_BinOpNode = function (context, node) {
     var left = res.register(this.visit(context, node.left_node));
     var right = res.register(this.visit(context, node.right_node));
 
-    if(res.error) return res;
+    if (res.error) return res;
 
     // console.log(left.toString(),right.toString())
     var result, error;
-    if(node.op_tok.type === TokenType.PLUS) {
+    if (node.op_tok.type === TokenType.PLUS) {
         [result, error] = left.add(right);
-    } else if(node.op_tok.type === TokenType.MINUS) {
+    } else if (node.op_tok.type === TokenType.MINUS) {
         [result, error] = left.sub(right);
-    } else if(node.op_tok.type === TokenType.MUL) {
+    } else if (node.op_tok.type === TokenType.MUL) {
         [result, error] = left.mul(right);
     } else {
         [result, error] = left.div(right);
     }
 
-    if(error) return res.failure(error);
+    if (error) return res.failure(error);
     return res.success(result.set_pos(node.pos_start, node.pos_end).set_context(context));
 }
 
@@ -824,15 +908,15 @@ Interpreter.prototype.visit_UnaryOpNode = function (context, node) {
     var res = new RTResult();
 
     var number = res.register(this.visit(context, node.node));
-    if(res.error) return res;
-    
+    if (res.error) return res;
+
     var error;
 
-    if(node.op_tok.type === TokenType.MINUS) {
+    if (node.op_tok.type === TokenType.MINUS) {
         [number, error] = number.neg();
     }
 
-    if(error) return res.failure(error);
+    if (error) return res.failure(error);
     return res.success(number.set_pos(node.pos_start, node.pos_end).set_context(context));
 }
 
@@ -850,7 +934,7 @@ function run(fn, text) {
     //Generate AST
     var parser = new Parser(tokens);
     var ast = parser.parse();
-    if(ast.error) return [null, ast.error];
+    if (ast.error) return [null, ast.error];
 
     //Run program
     var interpreter = new Interpreter();
@@ -864,8 +948,14 @@ function run(fn, text) {
 
 
 
-function skink(file) { return; }
-skink.run = run;
+function skink(file) {
+    return run(require("path").resolve(file).split("/").pop(), fs.readFileSync(file, "utf-8"));
+}
 
+skink.eval = function (str) {
+    return run("<anonymous>", str);
+}
+
+skink.run = run;
 
 module.exports = skink;

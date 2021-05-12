@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 var skink = require("./skink.js");
 var prompt = require("prompt-sync")();
+
 //Grab provided args.
 var args = process.argv.slice(2);
-if(args.length === 0) {    
+if(args.length === 1) {
+    var temp = skink(args[0]);
+    if(temp[1]) {
+    console.log(temp[1].toString());
+    }
+
+} else {    
     //Shell
 
     console.log('Type "exit" to exit.')
@@ -19,5 +26,5 @@ if(args.length === 0) {
         else
             console.log("" + result);
     }
-}
+} 
 
