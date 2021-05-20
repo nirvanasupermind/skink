@@ -3064,6 +3064,18 @@ global_scope.set_const("func", func_meta);
 global_scope.set_const("string", string_meta);
 global_scope.set_const("VOID", new Void());
 global_scope.set_const("bool", bool_meta);
+global_scope.set_const("print", new Func(function (args) {
+    var a = args[0];
+    process.stdout.write("" + a);
+    return [new Void(), null];
+}, 1, "print"));
+
+
+global_scope.set_const("println", new Func(function (args) {
+    var a = args[0];
+    console.log("" + a);
+    return [new Void(), null];
+}, 1, "println"));
 
 object_meta.set("new", new Func(function (args) {
     var a = args[0];

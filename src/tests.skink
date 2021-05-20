@@ -1,2 +1,8 @@
-tuple a = ("a", "b");
-tuple.forEach((string item, int i) => void { 2 });
+println("Hello World!");
+println("bye World!");
+
+int sqr(int x) {
+    return x * x;
+}
+
+println(sqr(3));
