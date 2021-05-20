@@ -1,1 +1,2 @@
- 1/0
+tuple a = ("a", "b");
+tuple.forEach((string item, int i) => void { 2 });
