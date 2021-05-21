@@ -1,8 +1,12 @@
-println("Hello World!");
-println("bye World!");
-
-int sqr(int x) {
-    return x * x;
+object Vector2 = {};
+Vector2 Vector2.new(int x, int y) {
+    return {"x": x, "y": y, "proto": Vector2};
 }
 
-println(sqr(3));
+Vector2 Vector2.plus(Vector2 this, Vector2 other) {
+    return Vector2.new(this.x + other.x, this.y + other.y);
+}
+
+Vector2 a = Vector2.new(1, 2);
+Vector2 b = Vector2.new(0, 1);
+println(a + b);
