@@ -1,12 +1,8 @@
-object Vector2 = {};
-Vector2 Vector2.new(int x, int y) {
-    return {"x": x, "y": y, "proto": Vector2};
-}
+import "fixed" as fixed;
+object Int26_6 = fixed.Int26_6;
+object Int52_12 = fixed.Int52_12;
 
-Vector2 Vector2.plus(Vector2 this, Vector2 other) {
-    return Vector2.new(this.x + other.x, this.y + other.y);
-}
+Int52_12 a = Int52_12.new(8192L);
+Int52_12 b = Int52_12.new(6144L);
 
-Vector2 a = Vector2.new(1, 2);
-Vector2 b = Vector2.new(0, 1);
-println(a + b);
+println(a * b);

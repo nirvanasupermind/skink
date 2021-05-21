@@ -5,13 +5,17 @@
 var util = require("util");
 var fs = require("fs");
 var i32 = require("i32");
-var { Int64 } = require("int64_t");
+var bigInt = require("big-integer");
 
 ///////////////////////////////////////
 //CONSTANTS
 ///////////////////////////////////////
 var DEFAULT_MAX_DEPTH = 8;
 var DEFAULT_TUPLE_MAX_LENGTH = 80;
+var ASSOSCATIONS = {
+    "fixed": "stdlib/fixed.skink"
+};
+
 
 var DIGITS = "0123456789";
 var LETTERS = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -439,42 +443,7 @@ var big = new function () {
 
 
 function toInt64(a) {
-    if (a instanceof Int64) {
-        return a;
-    } else if (a instanceof Int32) {
-        return toInt64(a.v);
-    } else if (typeof a === "string") {
-        if (a.charAt(0) === "-") {
-            return toInt64(a.substring(1)).mul(new Int64(-1));
-        } else {
-            var arr = new Array(8);
-            arr[0] = big.mod(big.div(big.div(a, 281474976710656), 256), 256);
-            arr[1] = big.mod(big.div(a, 281474976710656), 256);
-            arr[2] = big.mod(big.div(a, 1099511627776), 256);
-            arr[3] = big.mod(big.div(a, 4294967296), 256);
-            arr[4] = big.mod(big.div(a, 16777216), 256);
-            arr[5] = big.mod(big.div(a, 65536), 256);
-            arr[6] = big.mod(big.div(a, 256), 256);
-            arr[7] = big.mod(a, 256);
-
-            arr = arr.map((el) => el.charAt(0) === "-" ? el.substring(1) : el);
-
-            return new Int64(Buffer.from(arr.map(parseFloat)));
-        }
-    } else if(a === undefined) { 
-        return new Int64(0);
-    } else {
-        // console.log(            Math.trunc(Math.sign(a) * Math.min(
-        //     Math.abs(a),
-        //     Math.pow(2,63)
-        //  )))
-        return new Int64(
-            Math.trunc(Math.sign(a) * Math.min(
-               Math.abs(a),
-               Number.MAX_SAFE_INTEGER
-            ))
-        );
-    }
+    return new Int64(a);
 }
 
 function make_MultilineNode(tmp) {
@@ -504,7 +473,7 @@ function get_type(a) {
 function create_int64(a) {
     if (a instanceof BaseObject)
         a = a.value;
-    return a instanceof Int32 ? I64.fromNumber(a.toNumber()) : isNumber(a) ? I64.fromNumber(parseFloat(a)) : a;
+    return a instanceof Int32 ? I64.fromNumber(a.toNumber()) : isNumber(a) ? I64.fromNumber(toNumber(a)) : a;
 }
 
 function cons(a, b) {
@@ -563,6 +532,19 @@ function div(a, b) {
             : a.div(b);
     }
 }
+
+function mod(a, b) {
+    if (isNumber(a) || isNumber(b)) {
+        return toNumber(a) + toNumber(b);
+    } else if (b instanceof Int64) {
+        return toInt64(a).mod(b);
+    } else {
+        return a instanceof Int64
+            ? a.mod(toInt64(b))
+            : a.mod(b);
+    }
+}
+
 
 
 function cmp(a, b) {
@@ -693,7 +675,7 @@ function clone(obj) {
     if (obj === null || typeof (obj) !== 'object' || 'isActiveClone' in obj)
         return obj;
 
-    var temp = {"__proto__":obj.__proto__};
+    var temp = { "__proto__": obj.__proto__ };
     for (var key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
             obj['isActiveClone'] = null;
@@ -758,6 +740,7 @@ var TokenType = buildSet([
     "MINUS",
     "MUL",
     "DIV",
+    "MOD",
     "EQ",
     "EE",
     "PE",
@@ -766,6 +749,8 @@ var TokenType = buildSet([
     "RPAREN",
     "LCURLY",
     "RCURLY",
+    "LSQUARE",
+    "RSQUARE",
     "COMMA",
     "DOT",
     "COLON",
@@ -789,7 +774,10 @@ var KEYWORDS = [
     "else",
     "while",
     "for",
-    "const"
+    "const",
+    "import",
+    "as",
+    "export"
 ];
 
 
@@ -842,7 +830,7 @@ Lexer.prototype.generate_tokens = function () {
             tokens.push(this.generate_number());
         } else if (this.current_char === '"') {
             tokens.push(this.generate_string());
-        }  else if (LETTERS.includes(this.current_char)) {
+        } else if (LETTERS.includes(this.current_char)) {
             tokens.push(this.generate_identifier());
         } else if (this.current_char === "+") {
             tokens.push(this.generate_plus());
@@ -852,7 +840,13 @@ Lexer.prototype.generate_tokens = function () {
             tokens.push(new Token(TokenType.MUL, null, this.pos));
             this.advance();
         } else if (this.current_char === "/") {
-            tokens.push(new Token(TokenType.DIV, null, this.pos));
+            var tok = this.generate_div();
+            if(tok) {
+            tokens.push(tok);
+            }
+            // console.log(tok)
+        } else if (this.current_char === "%") {
+            tokens.push(new Token(TokenType.MOD, null, this.pos));
             this.advance();
         } else if (this.current_char === "(") {
             tokens.push(new Token(TokenType.LPAREN, null, this.pos));
@@ -866,7 +860,13 @@ Lexer.prototype.generate_tokens = function () {
         } else if (this.current_char === "}") {
             tokens.push(new Token(TokenType.RCURLY, null, this.pos));
             this.advance();
-        } else if (this.current_char === ",") {
+        } else if (this.current_char === "[") {
+            tokens.push(new Token(TokenType.LSQUARE, null, this.pos));
+            this.advance();
+        } else if (this.current_char === "]") {
+            tokens.push(new Token(TokenType.RSQUARE, null, this.pos));
+            this.advance();
+        }  else if (this.current_char === ",") {
             tokens.push(new Token(TokenType.COMMA, null, this.pos));
             this.advance();
         } else if (this.current_char === ".") {
@@ -944,24 +944,24 @@ Lexer.prototype.generate_string = function () {
     this.advance();
 
     var escape_characters = {
-      "n": "\n",
-      "t": "\t"
+        "n": "\n",
+        "t": "\t"
     };
 
-    while(this.current_char !== null && (this.current_char != '"' || escape_character)) {
-      if(escape_character) {
-        string += escape_characters[this.current_char] || this.current_char;
-      } else {
-        if(this.current_char == '\\')
-          escape_character = true;
-        else
-          string += this.current_char;
-      }
+    while (this.current_char !== null && (this.current_char != '"' || escape_character)) {
+        if (escape_character) {
+            string += escape_characters[this.current_char] || this.current_char;
+        } else {
+            if (this.current_char == '\\')
+                escape_character = true;
+            else
+                string += this.current_char;
+        }
 
-      this.advance()
-      escape_character = false;
+        this.advance()
+        escape_character = false;
     }
-    
+
     this.advance();
     return new Token(TokenType.STRING, string, pos_start, this.pos);
 
@@ -1052,6 +1052,23 @@ Lexer.prototype.generate_minus = function () {
         return new Token(TokenType.ME, pos_start, this.pos);
     } else {
         return new Token(TokenType.MINUS, pos_start, this.pos);
+    }
+}
+
+
+Lexer.prototype.generate_div = function () {
+    var pos_start = clone(this.pos);
+    this.advance();
+
+    if (this.current_char === "*") {
+        while(this.current_char !== null && !(this.current_char === "/")) {    
+            this.advance();
+        }
+
+        this.advance();        
+
+    } else {
+        return new Token(TokenType.DIV, null, pos_start, this.pos);
     }
 }
 
@@ -1184,6 +1201,14 @@ function ReturnNode(node) {
     this.pos_end = this.node.pos_end;
 }
 
+function ExportNode(node) {
+    this.node = node;
+
+    this.pos_start = this.node.pos_start;
+    this.pos_end = this.node.pos_end;
+}
+
+
 function BlockNode(node) {
     this.node = node;
 
@@ -1216,6 +1241,15 @@ function DotNode(obj_node, prop_tok) {
 }
 
 
+function KeyNode(obj_node, prop_node) {
+    this.obj_node = obj_node;
+    this.prop_node = prop_node;
+
+    this.pos_start = this.obj_node.pos_start;
+    this.pos_end = this.prop_node.pos_end;
+}
+
+
 
 function CallNode(node_to_call, arg_nodes) {
     this.node_to_call = node_to_call;
@@ -1236,6 +1270,14 @@ function WhileNode(cond, expr) {
     this.pos_start = this.cond.pos_start;
     this.pos_end = this.expr.pos_end;
 }
+
+function ImportNode(filename, name) {
+    this.filename = filename;
+    this.name = name;
+    this.pos_start = this.filename.pos_start;
+    this.pos_end = this.name.pos_end;
+}
+
 
 
 function ForNode(expr1, expr2, expr3, body) {
@@ -1260,6 +1302,12 @@ function FuncDeclNode(return_type_tok, var_name, signature, body) {
 
 function ObjectNode(pairs, pos_start, pos_end) {
     this.pairs = pairs;
+    this.pos_start = pos_start;
+    this.pos_end = pos_end;
+}
+
+function TupleNode(elements, pos_start, pos_end) {
+    this.elements = elements;
     this.pos_start = pos_start;
     this.pos_end = pos_end;
 }
@@ -1539,7 +1587,8 @@ Parser.prototype.attribute_expr = function () {
     if (res.error) return res;
 
     var result = atom;
-    while (this.current_tok.type === TokenType.DOT) {
+    while (this.current_tok.type === TokenType.DOT || this.current_tok.type === TokenType.LSQUARE) {
+        if(this.current_tok.type === TokenType.DOT) {
         res.register(this.advance());
         if (this.current_tok.type !== TokenType.IDENTIFIER && this.current_tok.type !== TokenType.KEYWORD) {
             return res.failure(new InvalidSyntaxError(
@@ -1551,7 +1600,24 @@ Parser.prototype.attribute_expr = function () {
         var tok = this.current_tok;
         result = new DotNode(result, tok);
         res.register(this.advance());
+    } else {
+        res.register(this.advance());
+
+        var prop = res.register(this.expr());
+
+        result = new KeyNode(result, prop);
+        if(this.current_tok.type !== TokenType.RSQUARE) {
+            return res.failure(new InvalidSyntaxError(
+                this.current_tok.pos_start, this.current_tok.pos_end,
+                'Expected "]"'
+            ));
+        }
+
+        res.register(this.advance());
     }
+    }
+
+
 
     return res.success(result);
 }
@@ -1565,7 +1631,7 @@ Parser.prototype.call = function () {
     while (this.current_tok.type === TokenType.LPAREN) {
         res.register(this.advance());
 
-        var arg_nodes = []
+        var arg_nodes = [];
 
         if (this.current_tok.type == TokenType.RPAREN) {
             res.register(this.advance());
@@ -1602,7 +1668,7 @@ Parser.prototype.func_decl_expr = function () {
     var return_type_tok = this.current_tok;
     res.register(this.advance());
     var var_name = res.register(this.attribute_expr());
-    if(res.error) return res;
+    if (res.error) return res;
     // res.register(this.advance());
     res.register(this.advance());
 
@@ -1750,16 +1816,16 @@ Parser.prototype.atom = function () {
         if (res.error) return res;
 
         return res.success(new UnaryOpNode(tok, attribute_expr));
-    } else if(tok.type === TokenType.LCURLY) {
+    } else if (tok.type === TokenType.LCURLY) {
         var pos_start = this.current_tok.pos_start;
         res.register(this.advance());
-        
+
         var pairs = [];
         if (this.current_tok.type == TokenType.RCURLY) {
             res.register(this.advance());
             return res.success(new ObjectNode(
-                pairs, 
-                pos_start, 
+                pairs,
+                pos_start,
                 this.current_tok.pos_end
             ));
         } else {
@@ -1767,7 +1833,7 @@ Parser.prototype.atom = function () {
             var key = res.register(this.expr());
             if (res.error) return res;
 
-            if(this.current_tok.type !== TokenType.COLON) {
+            if (this.current_tok.type !== TokenType.COLON) {
                 return res.failure(new InvalidSyntaxError(
                     this.current_tok.pos_start, this.current_tok.pos_end,
                     'Expected ":"'
@@ -1786,7 +1852,7 @@ Parser.prototype.atom = function () {
                 var key = res.register(this.expr());
                 if (res.error) return res;
 
-                if(this.current_tok.type !== TokenType.COLON) {
+                if (this.current_tok.type !== TokenType.COLON) {
                     return res.failure(new InvalidSyntaxError(
                         this.current_tok.pos_start, this.current_tok.pos_end,
                         'Expected ":"'
@@ -1797,7 +1863,7 @@ Parser.prototype.atom = function () {
                 var value = res.register(this.expr());
                 if (res.error) return res;
 
-                pairs.push([key, value]);                
+                pairs.push([key, value]);
             }
 
 
@@ -1810,8 +1876,8 @@ Parser.prototype.atom = function () {
 
             res.register(this.advance());
             return res.success(new ObjectNode(
-                pairs, 
-                pos_start, 
+                pairs,
+                pos_start,
                 this.current_tok.pos_end
             ));
         }
@@ -1824,10 +1890,55 @@ Parser.prototype.atom = function () {
         res.register(this.advance());
         return res.success(new StringNode(tok));
     } else if (tok.type === TokenType.LPAREN) {
+        var pos_start = clone(this.current_tok.pos_start);
         res.register(this.advance());
+        if (this.current_tok.type === TokenType.RPAREN) {
+            res.register(this.advance());
+            return res.success(new TupleNode(
+                [],
+                pos_start,
+                this.current_tok.pos_end
+            ));
+        }
+
         var expr = res.register(this.expr());
 
-        if (this.current_tok.type !== TokenType.RPAREN) {
+        if (this.current_tok.type === TokenType.COMMA) {
+            res.register(this.advance());
+            if (this.current_tok.type === TokenType.RPAREN) {
+                res.register(this.advance());
+                return res.success(new TupleNode(
+                    [expr],
+                    pos_start,
+                    this.current_tok.pos_end
+                ));
+            } else {
+                var elements = [expr];
+
+                res.register(this.reverse());
+
+                while (this.current_tok.type == TokenType.COMMA) {
+                    res.register(this.advance());
+
+                    elements.push(res.register(this.expr()))
+                    if (res.error) return res;
+                }
+
+                if (this.current_tok.type != TokenType.RPAREN) {
+                    return res.failure(new InvalidSyntaxError(
+                        this.current_tok.pos_start, this.current_tok.pos_end,
+                        'Expected "," or ")"'
+                    ))
+                }
+
+                res.register(this.advance());
+                return res.success(new TupleNode(
+                    elements, 
+                    pos_start, 
+                    this.current_tok.pos_end
+                ));
+            }
+        } else if (this.current_tok.type !== TokenType.RPAREN) {
             return res.failure(new InvalidSyntaxError(
                 this.current_tok.pos_start, this.current_tok.pos_end,
                 'Expected ")"'
@@ -1840,6 +1951,7 @@ Parser.prototype.atom = function () {
         res.register(this.advance());
         return res.success(new NumberNode(tok));
     } else {
+        console.log(tok)
         return res.failure(new InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
             "Expected " + or(["int", "long", "double", "identifier", '"+"', '"-"', '"("'])
@@ -1848,7 +1960,7 @@ Parser.prototype.atom = function () {
 }
 
 Parser.prototype.term = function () {
-    return this.bin_op(this.call, [TokenType.MUL, TokenType.DIV]);
+    return this.bin_op(this.call, [TokenType.MUL, TokenType.DIV, TokenType.MOD]);
 }
 
 Parser.prototype.add_expr = function () {
@@ -1898,9 +2010,9 @@ Parser.prototype.assignment_expr = function () {
     return res.success(var_name);
 }
 
+
 Parser.prototype.expr = function () {
     var res = new ParseResult();
-    var prev = this.tokens[this.tok_idx - 1];
     var next = this.tokens[this.tok_idx + 1];
     var second_next = this.tokens[this.tok_idx + 2];
     if (this.current_tok.type === TokenType.EOF || this.current_tok.type === TokenType.NEWLINE) {
@@ -1926,7 +2038,45 @@ Parser.prototype.expr = function () {
         var expr = res.register(this.expr());
         if (res.error) return res;
         return res.success(new ReturnNode(expr));
-    } else if (this.current_tok.type === TokenType.IDENTIFIER
+    } else if (this.current_tok.matches(TokenType.KEYWORD, "export")) {
+        res.register(this.advance());
+        var expr = res.register(this.expr());
+        if (res.error) return res;
+        return res.success(new ExportNode(expr));
+    } else if (this.current_tok.matches(TokenType.KEYWORD, "import")) {
+        res.register(this.advance());
+        // if(this.current_tok.type !== TokenType.STRING) {
+        //     return res.failure(new InvalidSyntaxError(
+        //         this.current_tok.pos_start, this.current_tok.pos_end,
+        //         "Expected string"
+        //     ));
+        // }
+
+        var filename = res.register(this.atom());
+
+        if(res.error) return res;
+
+
+        if(!this.current_tok.matches(TokenType.KEYWORD, "as")) {
+            return res.failure(new InvalidSyntaxError(
+                this.current_tok.pos_start, this.current_tok.pos_end,
+                'Expected "as"'
+            ));
+        }
+
+        res.register(this.advance());
+        if(this.current_tok.type !== TokenType.IDENTIFIER) {
+            return res.failure(new InvalidSyntaxError(
+                this.current_tok.pos_start, this.current_tok.pos_end,
+                "Expected identifier"
+            ));
+        }
+
+        var name = this.current_tok;
+        
+        res.register(this.advance());
+        return res.success(new ImportNode(filename, name));
+    }  else if (this.current_tok.type === TokenType.IDENTIFIER
         && next
         && next.type === TokenType.IDENTIFIER
         && second_next
@@ -2068,6 +2218,10 @@ Int32.prototype.div = function (other) {
     return new Int32(i32.idiv(this.v, other.v));
 }
 
+Int32.prototype.mod = function (other) {
+    other = new Int32(other);
+    return new Int32(i32.imod(this.v, other.v));
+}
 
 Int32.prototype.cmp = function (other) {
     other = new Int32(other);
@@ -2078,8 +2232,53 @@ Int32.prototype.toString = function () {
     return this.v.toString();
 }
 
+
+function Int64(v) {
+    if(v instanceof Int32) v = v.v;
+
+    if (v instanceof Int64)
+        this.v = v.v;
+    else
+        this.v = bigInt(v).mod(bigInt("18446744073709551616"));
+}
+
+Int64.prototype.add = function (other) {
+    other = new Int64(other);
+    return new Int64(this.v.add(other.v));
+}
+
+Int64.prototype.sub = function (other) {
+    other = new Int64(other);
+    return new Int64(this.v.subtract(other.v));
+}
+
+Int64.prototype.mul = function (other) {
+    other = new Int64(other);
+    return new Int64(this.v.multiply(other.v));
+}
+
+Int64.prototype.div = function (other) {
+    other = new Int64(other);
+    return new Int64(this.v.divide(other.v));
+}
+
+Int64.prototype.mod = function (other) {
+    other = new Int64(other);
+    return new Int64(this.v.mod(other.v));
+}
+
+Int64.prototype.cmp = function (other) {
+    other = new Int64(other);
+    return this.v.cmp(other.v);
+}
+
+Int64.prototype.toString = function () {
+    return this.v.toString();
+}
+
+
 function get_id(n) {
-    return JSON.stringify({"str": "" + n, "constructor": n == null ? "null" : n.constructor.name});
+    return JSON.stringify({ "str": "" + n, "constructor": n == null ? "null" : n.constructor.name });
 }
 
 function BaseObject(parent = object_meta) {
@@ -2111,99 +2310,99 @@ BaseObject.prototype.set_pos = function (pos_start = null, pos_end = null) {
 }
 
 BaseObject.prototype.set = function (key, value) {
-    if(typeof key !== "string") {
+    if (typeof key !== "string") {
         this.set("" + key, value);
     } else {
-    var index = this.keys.indexOf(key);
-    if(index === -1) {
-        this.keys.push(key);
-        this.values.push(value);
-        this.is_const.push(false);
-    } else if(!this.is_const[index]) {
-    this.values[index] = value;
-    }
+        var index = this.keys.indexOf(key);
+        if (index === -1) {
+            this.keys.push(key);
+            this.values.push(value);
+            this.is_const.push(false);
+        } else if (!this.is_const[index]) {
+            this.values[index] = value;
+        }
 
-    if(key === "proto") {
-        this.parent = value;
-        if(value instanceof BaseObject) {
-        for(var i = 0; i < Object.keys(value).length; i++) {
-            var prop = Object.keys(value)[i];
-            if(this[prop] == null) {
-                this[prop] = Object.values(value)[i];
+        if (key === "proto") {
+            this.parent = value;
+            if (value instanceof BaseObject) {
+                for (var i = 0; i < Object.keys(value).length; i++) {
+                    var prop = Object.keys(value)[i];
+                    if (this[prop] == null) {
+                        this[prop] = Object.values(value)[i];
+                    }
+                }
+
+                Object.setPrototypeOf(this, value.__proto__);
             }
         }
-
-        Object.setPrototypeOf(this, value.__proto__);
-        }
     }
-}
 }
 
 
 BaseObject.prototype.set_const = function (key, value) {
-    if(typeof key !== "string") {
-        this.set_const("" + key, value); 
+    if (typeof key !== "string") {
+        this.set_const("" + key, value);
     } else {
-    var index = this.keys.indexOf(key);
-    if(index === -1) {
-        this.keys.push(key);
-        this.values.push(value);
-        this.is_const.push(true);
-    } else if(!this.is_const[index]) {
-    this.values[index] = value;
-    this.is_const[index] = true;
+        var index = this.keys.indexOf(key);
+        if (index === -1) {
+            this.keys.push(key);
+            this.values.push(value);
+            this.is_const.push(true);
+        } else if (!this.is_const[index]) {
+            this.values[index] = value;
+            this.is_const[index] = true;
+        }
     }
-}
 }
 
 
 BaseObject.prototype.get = function (key) {
-    if(typeof key !== "string") {
+    if (typeof key !== "string") {
         return this.get("" + key);
-    } else if(key === "proto") {
+    } else if (key === "proto") {
         return this.parent == null ? new Void() : this.parent;
     } else {
-    var index = this.keys.indexOf(key);
-    var result = this.values[index];
-    
-    if(result == null && this.parent) return this.parent.get(key);
+        var index = this.keys.indexOf(key);
+        var result = this.values[index];
 
-    return result;
+        if (result == null && this.parent) return this.parent.get(key);
+
+        return result;
     }
 }
 
 
 BaseObject.prototype.containsKey = function (key) {
-    if(typeof key !== "string") {
+    if (typeof key !== "string") {
         return this.containsKey("" + key);
     } else {
-    key = "" + key;
-    var index = this.keys.indexOf(key);
-    var result = index === -1;
-    
-    if(!result && this.parent) return this.parent.containsKey(key);
+        key = "" + key;
+        var index = this.keys.indexOf(key);
+        var result = index === -1;
 
-    return result;
+        if (!result && this.parent) return this.parent.containsKey(key);
+
+        return result;
     }
 }
 
 BaseObject.prototype.containsValue = function (value) {
     var index = this.values.map(get_id).indexOf(get_id(value));
     var result = index !== -1;
-    
-    if(!result && this.parent) return this.parent.containsValue(value);
+
+    if (!result && this.parent) return this.parent.containsValue(value);
 
     return result;
 }
 
 
 BaseObject.prototype.flat_get = function (key) {
-    if(typeof key !== "string") {
+    if (typeof key !== "string") {
         return this.flat_get("" + key);
     } else {
-    var index = this.keys.indexOf(key);
-    var result = this.values[index];
-    return result;
+        var index = this.keys.indexOf(key);
+        var result = this.values[index];
+        return result;
     }
 }
 
@@ -2216,82 +2415,92 @@ BaseObject.prototype.flat_get = function (key) {
 
 
 BaseObject.prototype.add = function (other) {
-    if(this.get("plus") instanceof Func) {
+    // console.log(this)
+    if (this.get("plus") instanceof Func) {
         return this.get("plus").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.sub = function (other) {
-    if(this.get("minus") instanceof Func) {
+    if (this.get("minus") instanceof Func) {
         return this.get("minus").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.mul = function (other) {
-    if(this.get("mul") instanceof Func) {
+    if (this.get("mul") instanceof Func) {
         return this.get("mul").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.div = function (other) {
-    if(this.get("div") instanceof Func) {
+    if (this.get("div") instanceof Func) {
         return this.get("div").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
+    }
+}
+BaseObject.prototype.mod = function (other) {
+    if (this.get("mod") instanceof Func) {
+        return this.get("mod").execute([this, other]);
+    } else {
+        return [null, this.illegal_operation(other)];
     }
 }
 
+
+
 BaseObject.prototype.neg = function () {
-    if(this.get("neg") instanceof Func) {
+    if (this.get("neg") instanceof Func) {
         return this.get("neg").execute([this]);
     } else {
-    return [null, this.illegal_operation(this)];
+        return [null, this.illegal_operation(this)];
     }
 }
 
 BaseObject.prototype.execute = function (args) {
-    if(this.get("execute") instanceof Func) {
+    if (this.get("execute") instanceof Func) {
         return this.get("execute").execute([this, args], this.pos_start, this.pos_end);
     } else {
-    return [null, this.illegal_operation(this)];
+        return [null, this.illegal_operation(this)];
     }
 }
 
 BaseObject.prototype.bitand = function (other) {
-    if(this.get("bitand") instanceof Func) {
+    if (this.get("bitand") instanceof Func) {
         return this.get("bitand").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.bitor = function (other) {
-    if(this.get("bitor") instanceof Func) {
+    if (this.get("bitor") instanceof Func) {
         return this.get("bitor").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.and = function (other) {
-    if(this.get("and") instanceof Func) {
+    if (this.get("and") instanceof Func) {
         return this.get("and").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.or = function () {
-    if(this.get("or") instanceof Func) {
+    if (this.get("or") instanceof Func) {
         return this.get("or").execute([this, other]);
-    } else {   
-    return [null, this.illegal_operation(other)];
+    } else {
+        return [null, this.illegal_operation(other)];
     }
 }
 
@@ -2300,51 +2509,51 @@ BaseObject.prototype.is = function (other) {
 }
 
 BaseObject.prototype.eq = function (other) {
-    if(this.get("eq") instanceof Func) {
+    if (this.get("eq") instanceof Func) {
         return this.get("eq").execute([this, other]);
     } else {
-    return [new Bool(this === other), null];
+        return [new Bool(this === other), null];
     }
 }
 
 
 BaseObject.prototype.ne = function (other) {
-    if(this.get("neq") instanceof Func) {
+    if (this.get("neq") instanceof Func) {
         return this.get("neq").execute([this, other]);
     } else {
-    return [new Bool(this !== other), null];
+        return [new Bool(this !== other), null];
     }
 }
 
 BaseObject.prototype.lt = function (other) {
-    if(this.get("lt") instanceof Func) {
+    if (this.get("lt") instanceof Func) {
         return this.get("lt").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.lte = function (other) {
-    if(this.get("lte") instanceof Func) {
+    if (this.get("lte") instanceof Func) {
         return this.get("lte").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.gt = function (other) {
-    if(this.get("gt") instanceof Func) {
+    if (this.get("gt") instanceof Func) {
         return this.get("gt").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
 BaseObject.prototype.gte = function (other) {
-    if(this.get("gte") instanceof Func) {
+    if (this.get("gte") instanceof Func) {
         return this.get("gte").execute([this, other]);
     } else {
-    return [null, this.illegal_operation(other)];
+        return [null, this.illegal_operation(other)];
     }
 }
 
@@ -2356,28 +2565,29 @@ BaseObject.prototype.illegal_operation = function (other) {
     );
 }
 
-BaseObject.prototype.toString = function (depthDecr=DEFAULT_MAX_DEPTH) {
-    if(this.get("toString") !== object_meta.get("toString") 
+BaseObject.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
+    if (this.get("toString") !== object_meta.get("toString")
         && this.get("toString") instanceof Func) {
         var result = this.get("toString").execute([this]);
-        if(!result[1]) return "" + result[0];
+        // console.log(result+"")
+        if (!result[1]) return "" + result[0];
     }
 
     var k = this.keys;
     var v = this.values;
 
-    if(depthDecr < 0) {
+    if (depthDecr < 0) {
         return "{...}";
     }
 
     var result = [];
-    for(var i = 0; i < k.length; i++) {
+    for (var i = 0; i < k.length; i++) {
         var key = k[i], value = v[i];
-        if(key === "proto") continue;
-        result.push(key+": "+value.toString(depthDecr-1));
+        if (key === "proto") continue;
+        result.push(key + ": " + value.toString(depthDecr - 1));
     }
 
-    return "{"+result.join(", ")+"}";
+    return "{" + result.join(", ") + "}";
 }
 
 var object_meta = new BaseObject(null);
@@ -2410,6 +2620,10 @@ func_meta.display_name = "func";
 
 var string_meta = new BaseObject(object_meta);
 string_meta.display_name = "string";
+
+
+var tuple_meta = new BaseObject(object_meta);
+tuple_meta.display_name = "tuple";
 
 
 function Namespace(parent = namespace_meta) {
@@ -2469,6 +2683,24 @@ Num.prototype.div = function (other) {
         return [null, this.illegal_operation(other)];
     }
 }
+
+Num.prototype.mod = function (other) {
+    if (other instanceof Num) {
+        if (other.value.toString() === "0" && !isNumber(other.value)) {
+            return [null, new RTError(
+                other.pos_start,
+                other.pos_end,
+                "attempt to divide by zero",
+                this.context
+            )];
+        }
+
+        return [new (cons(this, other))(mod(this.value, other.value)), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
+}
+
 
 Num.prototype.lt = function (other) {
     return [new Bool(cmp(this, other) < 0), null];
@@ -2647,9 +2879,73 @@ function BaseString(str) {
 }
 
 util.inherits(BaseString, BaseObject);
+BaseString.prototype.add = function (other) {
+    if (other instanceof BaseString) {
+        return [new BaseString(this.str + other.str), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
+}
+
+BaseString.prototype.mul = function (other) {
+    if (other instanceof Integer || other instanceof Long) {
+        return [new BaseString(new Array(Math.max(0, toNumber(other.value)) + 1).join(this.str)), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
+}
+
 BaseString.prototype.toString = function () {
     return this.str;
 }
+
+function Tuple(elements) {
+    BaseObject.call(this, tuple_meta);
+    this.elements = Object.freeze(elements);
+    for(var i = 0; i < elements.length; i++) {
+        this.set_const(i, elements[i]);
+    }
+}
+
+util.inherits(Tuple, BaseObject);
+Tuple.prototype.add = function (other) {
+    if(other instanceof Tuple) {
+        return [new Tuple(this.elements.concat(other.elements)), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
+}
+
+
+
+Tuple.prototype.toString = function (depthDecr=DEFAULT_MAX_DEPTH) {
+    if (depthDecr < 0) {
+        return "(...)";
+    } else if(this.elements.length === 0) {
+        return "()";
+    }  else if(this.elements.length === 1) {
+        return "("+this.elements[0].toString(depthDecr-1)+",)";
+    } else {
+    var flag = false;
+    var result = [];
+    for (var i = 0; i < this.elements.length; i++) {
+        if(i >= DEFAULT_TUPLE_MAX_LENGTH) {
+            flag = true;
+            break;
+        }
+
+        var item = this.elements[i];
+        result.push(item.toString(depthDecr-1));
+    }
+
+    if(flag) {
+        result[result.length - 1] += "...";
+    }
+
+    return "(" + result.join(", ") + ")";
+}
+}
+
 
 ///////////////////////////////////////
 //RUNTIME RESULT
@@ -2715,6 +3011,55 @@ Interpreter.prototype.visit_ReturnNode = function (context, node) {
     return Object.assign(value, { "_shouldBeReturned": true });
 }
 
+Interpreter.prototype.visit_ExportNode = function (context, node) {
+    var res = new RTResult();
+    var value = res.register(this.visit(context, node.node));
+    if (res.error) return res;
+    global_scope.set("__exports", value);
+    return res.success(value);
+}
+
+Interpreter.prototype.visit_ImportNode = function (context, node) {
+    var res = new RTResult();
+    var filename = res.register(this.visit(context, node.filename));
+    if (res.error) return res;
+
+    var name = node.name.value;
+
+    var fname = "" + filename;
+    if(ASSOSCATIONS[fname]) fname = ASSOSCATIONS[fname];
+
+    var [_, error] = skink(fname, new Namespace(context.scope));
+    if(error) return res.failure(error);
+
+    var value = global_scope.get("__exports");
+    if(value == null) { value = new Void().set_pos(node.pos_start, node.pos_end).set_context(context); }
+
+    if(res.error) return res;
+
+    var old_value = context.scope.get(name);
+    if(old_value != null) {
+    //If there is a declaration type stored up, then use that, otherwise look at prototype (parent)
+    var var_type = old_value.decl_type || old_value.parent;
+
+    if (!isinstance(value, var_type)) {
+        return res.failure(new RTError(
+            node.pos_start, node.pos_end,
+            "cannot convert " + get_display_name(get_type(value)) + " to " + get_display_name(var_type),
+            context
+        ));
+    }
+
+}
+
+    // console.log(old_value.context.scope.keys, old_value.context.scope.is_const)
+    context.scope.set(name, value);
+
+    return res.success(value);
+}
+
+
+
 Interpreter.prototype.visit_BlockNode = function (context, node, display_name = "<anonymous closure>") {
     var res = new RTResult();
     var new_context = new Context(display_name, context, node.pos_start);
@@ -2777,30 +3122,48 @@ Interpreter.prototype.visit_NumberNode = function (context, node) {
 Interpreter.prototype.visit_StringNode = function (context, node) {
     var res = new RTResult();
     return res.success(
-            new BaseString(node.tok.value)
-                .set_pos(node.tok.pos_start, node.tok.pos_end)
-                .set_context(context)
+        new BaseString(node.tok.value)
+            .set_pos(node.tok.pos_start, node.tok.pos_end)
+            .set_context(context)
     );
 }
+
+Interpreter.prototype.visit_TupleNode = function (context, node) {
+    var res = new RTResult();
+    var elements = new Array(node.elements.length);
+    for(var i = 0; i < node.elements.length; i++) {
+        var item = res.register(this.visit(context, node.elements[i]));
+        if(res.error) return res;
+
+        elements[i] = item;
+    }
+    // console.log(elements)
+    return res.success(
+        new Tuple(elements)
+            .set_pos(node.pos_start, node.pos_end)
+            .set_context(context)
+    );
+}
+
 
 Interpreter.prototype.visit_ObjectNode = function (context, node) {
     var res = new RTResult();
     var o = new BaseObject();
-    for(var i = 0; i < node.pairs.length; i++) {
+    for (var i = 0; i < node.pairs.length; i++) {
         var key = res.register(this.visit(context, node.pairs[i][0]));
-        if(res.error) return res;
+        if (res.error) return res;
 
         var value = res.register(this.visit(context, node.pairs[i][1]));
-        if(res.error) return res;
+        if (res.error) return res;
 
         o.set(key, value);
     }
-    
+
 
     return res.success(
-                o
-                .set_pos(node.pos_start, node.pos_end)
-                .set_context(context)
+        o
+            .set_pos(node.pos_start, node.pos_end)
+            .set_context(context)
     );
 }
 
@@ -2958,7 +3321,7 @@ Interpreter.prototype.visit_VarReassignNode = function (context, node) {
 
         value.set_decl_type(var_type);
         value.set_context(old_value.context);
-// console.log(old_value.context.scope.keys, old_value.context.scope.is_const)
+        // console.log(old_value.context.scope.keys, old_value.context.scope.is_const)
         old_value.context.scope.set(var_name, value);
 
         return res.success(value);
@@ -2982,6 +3345,8 @@ Interpreter.prototype.visit_BinOpNode = function (context, node) {
         [result, error] = left.mul(right);
     } else if (node.op_tok.type === TokenType.DIV) {
         [result, error] = left.div(right);
+    } else if (node.op_tok.type === TokenType.MOD) {
+        [result, error] = left.mod(right);
     } else if (node.op_tok.type === TokenType.BITAND) {
         [result, error] = left.bitand(right);
     } else if (node.op_tok.type === TokenType.BITOR) {
@@ -3224,86 +3589,86 @@ Interpreter.prototype.visit_FuncDeclNode = function (context, node) {
         return [result, null];
     }, signature.length, name, signature[0] && signature[0][1].value === "this");
 
-    
-    if(node.var_name instanceof DotNode) {
+
+    if (node.var_name instanceof DotNode) {
         var obj = res.register(this.visit(context, node.var_name.obj_node));
-        if(res.error) return res;
+        if (res.error) return res;
 
         var old_value = obj.get(name);
 
-        
-        if(old_value != null) {
-            if(!isinstance(old_value, func_meta)) {
-            return res.failure(new RTError(
-                node.pos_start, node.pos_end,
-                "cannot convert func to "+get_display_name(get_type(old_value)),
-                context
-            ));
+
+        if (old_value != null) {
+            if (!isinstance(old_value, func_meta)) {
+                return res.failure(new RTError(
+                    node.pos_start, node.pos_end,
+                    "cannot convert func to " + get_display_name(get_type(old_value)),
+                    context
+                ));
+            }
         }
-    }
 
         func.set_context(context);
         func.set_pos(node.pos_start, node.pos_end);
-        
+
         obj.set(name, func);
 
         return res.success(func);
     } else {
         var old_value = context.scope.get(name);
 
-        if(old_value != null && !isinstance(old_value, func_meta)) {
+        if (old_value != null && !isinstance(old_value, func_meta)) {
             return res.failure(new RTError(
                 node.pos_start, node.pos_end,
-                "cannot convert func to "+get_display_name(get_type(old_value)),
+                "cannot convert func to " + get_display_name(get_type(old_value)),
                 context
             ));
         }
 
 
-    func.set_context(context);
-    func.set_pos(node.pos_start, node.pos_end);
-    context.scope.set(name, func);
+        func.set_context(context);
+        func.set_pos(node.pos_start, node.pos_end);
+        context.scope.set(name, func);
 
-    return res.success(func);
+        return res.success(func);
     }
 }
 
 Interpreter.prototype.visit_CallNode = function (context, node) {
     var res = new RTResult();
     try {
-    var value_to_call = res.register(this.visit(context, node.node_to_call));
-    if (res.error) return res;
-
-    var args = [];
-    for (var i = 0; i < node.arg_nodes.length; i++) {
-        var arg = res.register(this.visit(context, node.arg_nodes[i]));
+        var value_to_call = res.register(this.visit(context, node.node_to_call));
         if (res.error) return res;
-        args.push(arg);
-    }
 
-    // console.log(value_to_call.is_method, node.node_to_call.constructor.name);
-    if(value_to_call.is_method && node.node_to_call instanceof DotNode) {
-        var temp = res.register(this.visit(context, node.node_to_call.obj_node));
-        if(res.error) return res;
-        args.unshift(temp);
-    }
+        var args = [];
+        for (var i = 0; i < node.arg_nodes.length; i++) {
+            var arg = res.register(this.visit(context, node.arg_nodes[i]));
+            if (res.error) return res;
+            args.push(arg);
+        }
 
-    var [result, error] = value_to_call.execute(args, node.pos_start, node.pos_end);
-    if (error) return res.failure(error);
+        // console.log(value_to_call.is_method, node.node_to_call.constructor.name);
+        if (value_to_call.is_method && node.node_to_call instanceof DotNode) {
+            var temp = res.register(this.visit(context, node.node_to_call.obj_node));
+            if (res.error) return res;
+            args.unshift(temp);
+        }
 
-    return res.success(result.set_pos(node.pos_start, node.pos_end));
-} catch(e) {
-    //Deal with stack errors
-    if(e instanceof RangeError) {
-        return res.failure(new RTError(
-          node.pos_start, node.pos_end,
-          "maximum recursion depth exceeded",
-          context
-        ))
-    } else {
-        throw e;
+        var [result, error] = value_to_call.execute(args, node.pos_start, node.pos_end);
+        if (error) return res.failure(error);
+
+        return res.success(result.set_pos(node.pos_start, node.pos_end));
+    } catch (e) {
+        //Deal with stack errors
+        if (e instanceof RangeError) {
+            return res.failure(new RTError(
+                node.pos_start, node.pos_end,
+                "maximum recursion depth exceeded",
+                context
+            ))
+        } else {
+            throw e;
+        }
     }
-}
 }
 
 Interpreter.prototype.visit_DotNode = function (context, node) {
@@ -3313,6 +3678,33 @@ Interpreter.prototype.visit_DotNode = function (context, node) {
     if (res.error) return res;
 
     var prop = node.prop_tok.value;
+    var result = obj.get(prop);
+    if (result == null) {
+        return res.success(new Void().set_pos(node.pos_start, node.pos_end).set_context(context));
+    } else {
+        result.set_pos(node.pos_start, node.pos_end);
+        if (!result.context) {
+            result.set_context(context);
+        }
+
+        // console.log(tmp.context);
+
+        return res.success(result.set_pos(node.pos_start, node.pos_end));
+
+    }
+}
+
+
+Interpreter.prototype.visit_KeyNode = function (context, node) {
+    var res = new RTResult();
+
+    var obj = res.register(this.visit(context, node.obj_node));
+    if (res.error) return res;
+
+    var prop = res.register(this.visit(context, node.prop_node));
+    if (res.error) return res;
+
+    
     var result = obj.get(prop);
     if (result == null) {
         return res.success(new Void().set_pos(node.pos_start, node.pos_end).set_context(context));
@@ -3342,14 +3734,17 @@ global_scope.set_const("false", new Bool(false));
 global_scope.set_const("int", int_meta);
 global_scope.set_const("long", long_meta);
 global_scope.set_const("double", double_meta);
+global_scope.set_const("string", string_meta);
 global_scope.set_const("number", num_meta);
 global_scope.set_const("object", object_meta);
 global_scope.set_const("ns", namespace_meta);
 global_scope.set_const("void", void_meta);
 global_scope.set_const("func", func_meta);
-global_scope.set_const("string", string_meta);
 global_scope.set_const("VOID", new Void());
 global_scope.set_const("bool", bool_meta);
+global_scope.set_const("tuple", tuple_meta);
+global_scope.set("__exports", new Void());
+
 global_scope.set("print", new Func(function (args) {
     var a = args[0];
     process.stdout.write("" + a);
@@ -3419,6 +3814,15 @@ int_meta.set("new", new Func(function (args) {
     }
 
 }, 1, "new"));
+
+int_meta.set_const("MIN_VALUE", new Integer(new Int32(-2147483648)));
+int_meta.set_const("MAX_VALUE", new Integer(new Int32(2147483647)));
+
+double_meta.set_const("MAX_VALUE", new Double(Number.MAX_VALUE));
+double_meta.set_const("NEGATIVE_INFINITY", new Double(-Infinity));
+double_meta.set_const("POSITIVE_INFINITY", new Double(+Infinity));
+double_meta.set_const("NaN", new Double(NaN));
+
 
 long_meta.set("new", new Func(function (args) {
     var a = args[0];
@@ -3508,12 +3912,12 @@ string_meta.set("new", new Func(function (args) {
 
 string_meta.set("toLowerCase", new Func(function (args) {
     var self = args[0];
-    if(!isinstance(self, string_meta)) {
+    if (!isinstance(self, string_meta)) {
         return [
             null,
             new RTError(
                 self.pos_start, self.pos_end,
-                "cannot convert "+get_display_name(get_type(self))+" to string",
+                "cannot convert " + get_display_name(get_type(self)) + " to string",
                 this.context
             )
         ];
@@ -3528,12 +3932,12 @@ string_meta.set("toLowerCase", new Func(function (args) {
 
 string_meta.set("toUpperCase", new Func(function (args) {
     var self = args[0];
-    if(!isinstance(self, string_meta)) {
+    if (!isinstance(self, string_meta)) {
         return [
             null,
             new RTError(
                 self.pos_start, self.pos_end,
-                "cannot convert "+get_display_name(get_type(self))+" to string",
+                "cannot convert " + get_display_name(get_type(self)) + " to string",
                 this.context
             )
         ];
@@ -3549,12 +3953,12 @@ string_meta.set("toUpperCase", new Func(function (args) {
 
 string_meta.set("length", new Func(function (args) {
     var self = args[0];
-    if(!isinstance(self, string_meta)) {
+    if (!isinstance(self, string_meta)) {
         return [
             null,
             new RTError(
                 self.pos_start, self.pos_end,
-                "cannot convert "+get_display_name(get_type(self))+" to string",
+                "cannot convert " + get_display_name(get_type(self)) + " to string",
                 this.context
             )
         ];
@@ -3571,23 +3975,23 @@ string_meta.set("length", new Func(function (args) {
 
 string_meta.set("indexOf", new Func(function (args) {
     var [self, str] = args;
-    if(!isinstance(self, string_meta)) {
+    if (!isinstance(self, string_meta)) {
         return [
             null,
             new RTError(
                 self.pos_start, self.pos_end,
-                "cannot convert "+get_display_name(get_type(self))+" to string",
+                "cannot convert " + get_display_name(get_type(self)) + " to string",
                 this.context
             )
         ];
     }
 
-    if(!isinstance(str, string_meta)) {
+    if (!isinstance(str, string_meta)) {
         return [
             null,
             new RTError(
                 str.pos_start, str.pos_end,
-                'cannot convert '+get_display_name(get_type(str))+' to string',
+                'cannot convert ' + get_display_name(get_type(str)) + ' to string',
                 context
             )
         ];
@@ -3601,23 +4005,23 @@ string_meta.set("indexOf", new Func(function (args) {
 
 string_meta.set("lastIndexOf", new Func(function (args) {
     var [self, str] = args;
-    if(!isinstance(self, string_meta)) {
+    if (!isinstance(self, string_meta)) {
         return [
             null,
             new RTError(
                 self.pos_start, self.pos_end,
-                "cannot convert "+get_display_name(get_type(self))+" to string",
+                "cannot convert " + get_display_name(get_type(self)) + " to string",
                 this.context
             )
         ];
     }
 
-    if(!isinstance(str, string_meta)) {
+    if (!isinstance(str, string_meta)) {
         return [
             null,
             new RTError(
                 str.pos_start, str.pos_end,
-                'cannot convert '+get_display_name(get_type(str))+' to string',
+                'cannot convert ' + get_display_name(get_type(str)) + ' to string',
                 context
             )
         ];
@@ -3629,10 +4033,76 @@ string_meta.set("lastIndexOf", new Func(function (args) {
     ];
 }, 2, "lastIndexOf", true));
 
+tuple_meta.set("new", new Func(function (args) {
+    var a = args[0];
+    if (isinstance(a, tuple_meta)) {
+        return [a, null];
+    } else {
+        return [
+            null,
+            new RTError(
+                a.pos_start, a.pos_end,
+                "cannot convert " + get_display_name(get_type(a)) + " to tuple",
+                this.context
+            )
+        ]
+    }
+
+}, 1, "new"));
+
+tuple_meta.set("last", new Func(function (args) {
+    var self = args[0];
+    if (!isinstance(self, tuple_meta)) {
+        return [
+            null,
+            new RTError(
+                a.pos_start, a.pos_end,
+                "cannot convert " + get_display_name(get_type(a)) + " to tuple",
+                this.context
+            )
+        ]
+    }
+
+    return [self.elements[self.elements.length - 1], null];
+}, 1, "last", true));
+
+namespace_meta.set("new", new Func(function (args) {
+    var a = args[0];
+    if (isinstance(a, namespace_meta)) {
+        return [a, null];
+    } else {
+        return [
+            null,
+            new RTError(
+                a.pos_start, a.pos_end,
+                "cannot convert " + get_display_name(get_type(a)) + " to ns",
+                this.context
+            )
+        ]
+    }
+
+}, 1, "new"));
 
 
 
-function run(fn, text) {
+string_meta.set("format", new Func(function (args) {
+    var a = args[0];
+    if (isinstance(a, tuple_meta)) {
+        return [new BaseString(a.elements.join("")), null];
+    } else {
+        return [
+            null,
+            new RTError(
+                a.pos_start, a.pos_end,
+                "cannot convert " + get_display_name(get_type(a)) + " to tuple",
+                this.context
+            )
+        ]
+    }
+
+}, 1, "format"));
+
+function run(fn, text, scope = global_scope) {
     //Generate tokens
     var lexer = new Lexer(fn, text);
     var [tokens, error] = lexer.generate_tokens();
@@ -3646,7 +4116,7 @@ function run(fn, text) {
     //Run program
     var interpreter = new Interpreter();
     var context = new Context("<program>");
-    context.scope = global_scope;
+    context.scope = scope;
 
     var result = interpreter.visit(context, ast.node);
 
@@ -3655,8 +4125,8 @@ function run(fn, text) {
 
 
 
-function skink(file) {
-    return run(require("path").resolve(file).split("/").pop(), fs.readFileSync(file, "utf-8"));
+function skink(file, scope = global_scope) {
+    return run(require("path").resolve(file).split("/").pop(), fs.readFileSync(file, "utf-8"), scope);
 }
 
 skink.eval = function (str) {

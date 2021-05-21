@@ -1,0 +1,185 @@
+/*
+  skink source code
+  usage permitted under terms of MIT License
+*/
+
+
+const int SCALE_26_6 = 64;
+const long SCALE_52_12 = 4096L;
+
+/*
+  Type `Int26_6` represents a signed 26.6 fixed-point number.
+  The integer part ranges from -33554432 to 33554431, inclusive. 
+  The fractional part has 6 bits of precision.
+*/ 
+object Int26_6 = {};
+
+
+Int26_6 Int26_6.new(int v) {
+    return {"v": v, "proto": Int26_6};
+}
+
+Int26_6 Int26_6.fromInt(int i) {
+    return Int26_6.new(i * SCALE_26_6);
+}
+
+
+/*
+  Returns an `Int26_6` whose value is (-this).
+*/
+Int26_6 Int26_6.neg(Int26_6 this) {
+    return Int26_6.new(-this.v);
+}
+
+/*
+  Returns an `Int26_6` whose value is (this + other).
+*/
+Int26_6 Int26_6.plus(Int26_6 this, Int26_6 other) {
+    return Int26_6.new(this.v + other.v);
+}
+
+/*
+  Returns an `Int26_6` whose value is (this - other).
+*/
+Int26_6 Int26_6.minus(Int26_6 this, Int26_6 other) {
+    return Int26_6.new(this.v - other.v);
+}
+
+/*
+  Returns an `Int26_6` whose value is (this * other).
+*/
+Int26_6 Int26_6.mul(Int26_6 this, Int26_6 other) {
+    return Int26_6.new((this.v * other.v) / SCALE_26_6);
+}
+
+
+Int26_6 Int26_6.div(Int26_6 this, Int26_6 other) {
+    return Int26_6.new((this.v * SCALE_26_6) / other.v);
+}
+
+/*
+  Returns an `Int26_6` whose value is (this % other).
+*/
+Int26_6 Int26_6.mod(Int26_6 this, Int26_6 other) {
+    return Int26_6.new(this.v % other.v);
+}
+
+Int26_6 Int26_6.trunc(Int26_6 this) {
+    return Int26_6.fromInt(this.v / SCALE_26_6);
+}
+
+/*
+  Returns whether two `Int26_6`s are equal.
+*/
+bool Int26_6.eq(Int26_6 this, Int26_6 other) {
+    return this.v == other.v;
+}
+/*
+  Returns whether two `Int26_6`s are not equal.
+*/
+bool Int26_6.neq(Int26_6 this, Int26_6 other) {
+    return this.v != other.v;
+}
+
+bool Int26_6.gt(Int26_6 this, Int26_6 other) {
+    return this.v > other.v;
+}
+
+bool Int26_6.gte(Int26_6 this, Int26_6 other) {
+    return this.v >= other.v;
+}
+
+bool Int26_6.lt(Int26_6 this, Int26_6 other) {
+    return this.v < other.v;
+}
+
+Int26_6 Int26_6.lte(Int26_6 this, Int26_6 other) {
+    return this.v <= other.v;
+}
+
+int Int26_6.intValue(Int26_6 this) {
+    return this.v / SCALE_26_6;
+}
+
+string Int26_6.toString(Int26_6 this) {
+    return string.format(((this.v / SCALE_26_6), ":", (this.v % SCALE_26_6)));
+}
+
+/*
+  Type `Int52_12` represents a signed 52.12 fixed-point number.
+  The integer part ranges from -2251799813685248 to 2251799813685247, inclusive. 
+  The fractional part has 12 bits of precision.
+*/ 
+object Int52_12 = {};
+Int52_12 Int52_12.new(long v) {
+    return {"v": v, "proto": Int52_12};
+}
+
+Int52_12 Int52_12.fromLong(long i) {
+    return Int52_12.new(i) * Int52_12.new(SCALE_52_12);
+}
+
+/*
+  Returns an `Int52_12` whose value is (-this).
+*/
+Int52_12 Int52_12.neg(Int52_12 this) {
+    return Int52_12.new(-this.v);
+}
+
+/*
+  Returns an `Int52_12` whose value is (this + other).
+*/
+Int52_12 Int52_12.plus(Int52_12 this, Int52_12 other) {
+    return Int52_12.new(this.v + other.v);
+}
+
+/*
+  Returns an `Int52_12` whose value is (this - other).
+*/
+Int52_12 Int52_12.minus(Int52_12 this, Int52_12 other) {
+    return Int52_12.new(this.v - other.v);
+}
+
+Int52_12 Int52_12.mul(Int52_12 this, Int52_12 other) {
+    return Int52_12.new((this.v * other.v) / SCALE_52_12)
+}
+
+Int52_12 Int52_12.div(Int52_12 this, Int52_12 other) {
+    return Int52_12.new((this.v * SCALE_52_12) / other.v);
+}
+
+
+Int52_12 Int52_12.mod(Int52_12 this, Int52_12 other) {
+    return Int52_12.new(this.v % other.v);
+}
+
+bool Int52_12.eq(Int52_12 this, Int52_12 other) {
+    return Int52_12.new(this.v == other.v);
+}
+
+bool Int52_12.neq(Int52_12 this, Int52_12 other) {
+    return Int52_12.new(this.v != other.v);
+}
+
+bool Int52_12.gt(Int52_12 this, Int52_12 other) {
+    return this.v > other.v;
+}
+
+bool Int52_12.gte(Int52_12 this, Int52_12 other) {
+    return this.v >= other.v;
+}
+
+bool Int52_12.lt(Int52_12 this, Int52_12 other) {
+    return this.v < other.v;
+}
+
+bool Int52_12.lte(Int52_12 this, Int52_12 other) {
+    return this.v <= other.v;
+}
+
+
+string Int52_12.toString(Int52_12 this) {
+    return string.format(((this.v / SCALE_52_12), ":", (this.v % SCALE_52_12)));
+}
+
+export {"Int26_6": Int26_6, "Int52_12": Int52_12};
