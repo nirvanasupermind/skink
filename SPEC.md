@@ -36,7 +36,7 @@ The following tokens are the Skink operators, formed from ASCII characters:
 
 
 ## 2.4 Literals
-A literal is the source code representation of a value of a type. Literals including integer literals, floating-point literals, and string literals.
+A literal is the source code representation of a value of a type. Literals include integer literals, floating-point literals, string literals, object literals, and tuple literals.
 
 ### 2.4.1 Integer Literals
 An integer literal consists of one or more ASCII digits from `0` to `9` optionally suffixed with a letter `L` or `l`, representing a positive integer. 
@@ -67,6 +67,9 @@ Examples of string literals:
 "foo" "bar" "baz" "\n"
 ```
 
+## 2.4.4 Object Literals
+## 2.4.5 Tuple Literals
+
 ## 2.5 Comments
 Comments consist of zero or more characters surrounded by the characters `/*` and `*/`. They are ignored by the interpreter.
 
@@ -85,6 +88,13 @@ A line break consists of one or more line break characters, where a line break c
 * the ASCII LF character, also known as "newline"
 * the ASCII CR character, also known as "return"
 * the ASCII semicolon character (`;`)
+Line breaks are used to divide code into lines.
+
+Whitespace consists of one or more whitespace characters, where a whitespace character is defined as one of the following:
+* the ASCII SP character, also known as "space"
+* the ASCII HT character, also known as "tab"
+
+Whitespace is ignored by the interpreter, with the exception of [literals](#24-literals).
 
 ## 2.7 Other Tokens
 
