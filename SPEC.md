@@ -7,7 +7,9 @@ Skink has a large standard library which contains several packages.
 This chapter specifies the lexical structure of Skink. -->
 
 # 1 Introduction
-Skink is a small, statically typed, interpreted programming language. It emphasizes prototype-based code. It is especially suited to numeric computation and scientific computing.
+Skink is a small, statically typed, interpreted programming language. It emphasizes prototype-based code. 
+
+Skink is especially suited to numeric computation and scientific computing.
 
 # 2 Lexical Structure
 This chapter specifies the lexical structure of Skink.
