@@ -1,0 +1,258 @@
+/*
+  Skink source code
+  Usage permitted under terms of MIT License
+*/
+
+
+/* Returns true if str1 is smaller than str2. */
+bool isSmaller(string str1, string str2) {
+      /* Calculate lengths of both string */
+      int n1 = str1.length();
+      int n2 = str2.length();
+      if (n1 < n2) {
+          return true;
+      }
+
+      if (n2 < n1) {
+          return false;
+      }
+
+      int i = -1;
+      bool result = false;
+      while(i < n1-1) {
+          i += 1;
+          println(i);
+          if (int.parse(str1.charAt(i)) < int.parse(str2.charAt(i))) {
+              return true;
+          }
+          
+          if(int.parse(str1.charAt(i)) > int.parse(str2.charAt(i))) {
+              return false;
+          }
+
+      }
+
+      return false;
+}
+ 
+
+
+string reverse(string str) {
+  string result = "";
+  int i = 0;
+  while(i < str.length()) {
+    result += str.charAt(-(i+1));
+    i += 1;
+  }
+
+
+  return result;
+}
+
+/*
+  Type `BigInt` represents a signed arbitrary-precision integer.
+*/
+object BigInt = {};
+
+/*
+  Converts the string `s` to a `BigInt`.
+*/
+BigInt BigInt.new(string s) {
+    
+    /* whether the number is negative is not */
+    bool negative = s.charAt(0) == "-";
+
+    /* The absolute value of the number, as a string */
+    string value = if(negative) { s.substring(1, s.length()) } else { s };
+
+    int i = 0;
+    while(value.charAt(i) == "0") {
+        i += 1;
+    }
+
+    value = value.substring(i, s.length());
+    return {
+        "value": value.substring(i, s.length()), 
+        "negative": negative, 
+        "proto": BigInt
+    };
+}
+
+/*  
+  Returns the absolute value of `this`. 
+*/
+BigInt BigInt.abs(BigInt this) {
+    return {
+        "value": this.value,
+        "negative": false,
+        "proto": BigInt
+    };
+}
+
+/*  
+  Returns the negated value.
+*/
+BigInt BigInt.neg(BigInt this) {
+    return {
+        "value": this.value,
+        "negative": !this.negative,
+        "proto": BigInt
+    };
+}
+
+/*  
+  Returns a `BigInt` whose value is `(this + other)`.
+*/
+BigInt BigInt.plus(BigInt this, BigInt other) {
+    if(this.negative && other.negative) {
+        return -((-this) + (-other));
+    } else {
+      if(this.negative && !other.negative) {
+        return other - (-this);
+      } else {
+        if(!this.negative && other.negative) {
+          return this - (-other);
+        } else {
+          /* both are positive */
+          string a = if(this.value.length() > other.value.length()) { this.value } else { other.value };
+          string b = if(this.value.length() > other.value.length()) { other.value } else { this.value };
+        
+          while(b.length() < a.length()) {
+              b = "0" + b;
+          }
+
+
+          string carry = "0";
+          string sum = "";
+
+          int i = 0;
+          while(i < a.length()) {
+              int place = a.length()-i-1;
+              string digisum = (int.parse(a.charAt(place))
+                                + int.parse(b.charAt(place))
+                                + int.parse(carry)).toString();
+
+              if(digisum.length() != 1) {
+                carry = digisum.charAt(0);
+              } else {
+                carry = "0";
+              }
+
+              sum = digisum.last() + sum;
+            
+              i += 1;
+          }
+
+          
+          return BigInt.new(sum);
+        }
+      }
+    }
+}
+
+/*  
+  Returns a `BigInt` whose value is `(this - other)`.
+*/
+BigInt BigInt.minus(BigInt this, BigInt other) {
+    if(this.value == other.value && this.negative == other.negative) {
+       return BigInt.new("0");
+    }
+
+    if(this.negative && other.negative) {
+        return (-this - (-other));
+    }
+
+    if(!this.negative && other.negative) {
+        return this + (-other);
+    }
+
+    if(this.negative && !other.negative) {
+        return -(-this + other);
+    }
+
+    string str1 = this.value;
+    string str2 = other.value;
+
+ 
+    /* Take an empty string for storing result */
+    string str = "";
+ 
+    /* Calculate length of both string */
+    int n1 = str1.length();
+    int n2 = str2.length();
+    
+    int carry = 0;  
+    
+    int i = -1;
+
+    /* 
+      Run loop till small string length
+      and subtract digit of str1 to str2 
+    */
+    while(i >= -n2) {
+          /* 
+            Do school mathematics, compute difference of
+            current digits 
+          */
+          int sub = (int.parse(str1.charAt(i))
+                      - int.parse(str2.charAt(i)) - carry);
+
+          /* 
+           If subtraction is less then zero  
+           we add then we add 10 into sub an
+           take carry as 1 for calculating next step 
+          */
+          if (sub < 0) {
+              sub += 10;
+              carry = 1;
+          } else {
+              carry = 0;
+          }
+
+          str = sub.toString() + str;
+          i -= 1;
+    }
+
+    return BigInt.new(str);   
+}
+
+/*
+  Compares two `BigInt`s, returns 1 if greater, 0 if equal, and -1 if less than.
+*/
+int BigInt.cmp(BigInt this, BigInt other) {
+  if(this.negative && other.negative) {
+    return -((-this).cmp(-other));
+  } 
+
+  if(this.negative && !other.negative) {
+    return -1;
+  }
+
+  if(!this.negative && other.negative) {
+    return 1;
+  }
+
+  println(isSmaller(this.value, other.value));
+  if(isSmaller(this.value, other.value)) {
+    return -1;
+  }
+
+  if(this.value == other.value) {
+    return 0;
+  }
+
+  return 1;
+}
+/*
+  Converts the `BigInt` into a string.
+*/
+string BigInt.toString(BigInt this) {
+    if(this.negative) { 
+        return "-" + this.value; 
+    } else { 
+        return this.value;
+    }
+}
+
+
+export BigInt;

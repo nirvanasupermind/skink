@@ -12,8 +12,8 @@ var bigInt = require("big-integer");
 ///////////////////////////////////////
 var DEFAULT_MAX_DEPTH = 8;
 var DEFAULT_TUPLE_MAX_LENGTH = 80;
-var ASSOSCATIONS = {
-    "fixed": "stdlib/fixed.skink"
+var PACKAGES = {
+    "bigint": "stdlib/bigint.skink",
 };
 
 
@@ -80,370 +80,15 @@ RTError.prototype.generate_traceback = function () {
 ///////////////////////////////////////
 //UTILITY FUNCTIONS
 ///////////////////////////////////////
-//Module for working with unsigned big integers as strings. 
-var ubig = new function () {
-    //remove leading zeros, etc.
-    function normalize(a) {
-        a = "" + a;
-        var temp = a.replace(/^0+/, '');
-        return (!temp ? "0" : temp);
-    }
-
-    //taken from https://codereview.stackexchange.com/questions/92966/multiplying-and-adding-big-numbers-represented-with-strings
-    function add(a, b) {
-        a = normalize(a);
-        b = normalize(b);
-
-        if (parseInt(a) == 0 && parseInt(b) == 0) {
-            return '0';
-        }
-
-        while (b.length < a.length) {
-            b = "0" + b;
-        }
-
-        while (a.length < b.length) {
-            a = "0" + a;
-        }
-
-        // console.log(a,b);
-
-
-        a = a.split('').reverse();
-        b = b.split('').reverse();
-
-
-        var result = [];
-
-        for (var i = 0; (a[i] >= 0) || (b[i] >= 0); i++) {
-            var sum = (parseInt(a[i])) + (parseInt(b[i]));
-
-            if (!result[i]) {
-                result[i] = 0;
-            }
-
-            var next = parseInt((result[i] + sum) / 10);
-            result[i] = (result[i] + sum) % 10;
-
-            if (next) {
-                result[i + 1] = next;
-            }
-        }
-
-        return result.reverse().join('');
-    }
-
-
-    //taken from https://stackoverflow.com/questions/2050111/subtracting-long-numbers-in-javascript
-    const subtract = (a, b) => [a, b].map(normalize).map(n => [...n].reverse()).reduce((a, b) => a.reduce((r, d, i) => {
-        let s = d - (b[i] || 0)
-        if (s < 0) {
-            s += 10
-            a[i + 1]--
-        }
-        return '' + s + r
-    }, '').replace(/^0+/, ''))
-
-
-    //taken from https://codereview.stackexchange.com/questions/92966/multiplying-and-adding-big-numbers-represented-with-strings
-    function multiply(a, b) {
-        a = normalize(a);
-        b = normalize(b);
-
-        if (parseInt(a) == 0 || parseInt(b) == 0) {
-            return '0';
-        }
-
-        a = a.split('').reverse();
-        b = b.split('').reverse();
-        var result = [];
-
-        for (var i = 0; a[i] >= 0; i++) {
-            for (var j = 0; b[j] >= 0; j++) {
-                if (!result[i + j]) {
-                    result[i + j] = 0;
-                }
-
-                result[i + j] += a[i] * b[j];
-            }
-        }
-
-        for (var i = 0; result[i] >= 0; i++) {
-            if (result[i] >= 10) {
-                if (!result[i + 1]) {
-                    result[i + 1] = 0;
-                }
-
-                result[i + 1] += parseInt(result[i] / 10);
-                result[i] %= 10;
-            }
-        }
-
-        return result.reverse().join('');
-    }
-
-
-
-    function factorial(n) {
-        if ((n === 0) || (n === 1))
-            return 1;
-        else
-            return (n * factorial(n - 1));
-    }
-
-
-    //taken from https://locutus.io/php/strings/ord/
-    function ord(string) {
-        const str = string + ''
-        const code = str.charCodeAt(0)
-        if (code >= 0xD800 && code <= 0xDBFF) {
-            // High surrogate (could change last hex to 0xDB7F to treat
-            // high private surrogates as single characters)
-            const hi = code
-            if (str.length === 1) {
-                // This is just a high surrogate with no following low surrogate,
-                // so we return its value;
-                return code
-                // we could also throw an error as it is not a complete character,
-                // but someone may want to know
-            }
-            const low = str.charCodeAt(1)
-            return ((hi - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000
-        }
-        if (code >= 0xDC00 && code <= 0xDFFF) {
-            // Low surrogate
-            // This is just a low surrogate with no preceding high surrogate,
-            // so we return its value;
-            return code
-            // we could also throw an error as it is not a complete character,
-            // but someone may want to know
-        }
-        return code
-    }
-
-    function longDivision(number, divisor) {
-        number = normalize(number);
-        divisor = parseInt(divisor);
-        if (isSmaller(number, "" + divisor)) {
-            return "0";
-        }
-
-        //As result can be very large store it in string  
-        var ans = "";
-        //Find prefix of number that is larger than divisor.  
-        var idx = 0;
-        var temp = ord(number[idx]) - ord('0');
-        while (temp < divisor) {
-            temp = (temp * 10 + ord(number[idx + 1]) - ord('0'));
-            idx += 1;
-        }
-        idx += 1;
-
-        //Repeatedly divide divisor with temp. After every division, update temp to 
-        //include one more digit.  
-        while (number.length > idx) {
-            //Store result in answer i.e. temp / divisor  
-            ans += String.fromCharCode((temp / divisor) + ord('0'));
-            //Take next digit of number 
-            temp = ((temp % divisor) * 10 + ord(number[idx]) - ord('0'));
-            idx += 1;
-        }
-
-        ans += String.fromCharCode((temp / divisor) + ord('0'));
-
-        //If divisor is greater than number  
-        if (ans.length === 0) {
-            return "0";
-        }
-        //else return ans  
-        return ans;
-    }
-
-    // Returns true if str1 is smaller than str2.
-    function isSmaller(str1, str2) {
-        // Calculate lengths of both string
-        var n1 = str1.length, n2 = str2.length;
-        if (n1 < n2)
-            return true;
-        if (n2 < n1)
-            return false;
-
-        for (var i = 0; i < n1; i++)
-            if (str1.charAt(i) < str2.charAt(i))
-                return true;
-            else if (str1.charAt(i) > str2.charAt(i))
-                return false;
-
-        return false;
-    }
-
-
-    this.add = add;
-    this.subtract = subtract;
-    this.multiply = multiply;
-    this.longDivision = longDivision;
-    this.isSmaller = isSmaller;
-    this.normalize = normalize;
-}
-
-//Module for working with signed big integers as strings.
-var big = new function () {
-    function normalize(a) {
-        a = "" + a;
-        return copysign(sgn(a), ubig.normalize(abs(a)));
-    }
-
-    function sgn(a) {
-        return a.charAt(0) === "-" ? -1 : 1;
-    }
-
-    function abs(a) {
-        return a.charAt(0) === "-" ? a.substring(1) : a;
-    }
-
-    function copysign(a, b) {
-        return (a === -1 ? neg(b) : b);
-    }
-
-    function neg(a) {
-        return a.charAt(0) === "-" ? a.substring(1) : "-" + a;
-    }
-
-    //Return -1 if x < y, 0 if x == y, 1 if x > y
-    function cmp(x, y) {
-        switch ([sgn(x), sgn(y)].join(" ")) {
-            //Both negative
-            case "-1 -1":
-                return -cmp(neg(x), neg(y));
-            //One negative
-            case "-1 1":
-                return -1
-            //One negative
-            case "1 -1":
-                return 1
-            //Both positive
-            case "1 1":
-                if (ubig.isSmaller(x, y)) { //less
-                    return -1;
-                } else if (x === y) { //equal
-                    return 0;
-                } else { //greater
-                    return 1;
-                }
-        }
-    }
-
-    //addition
-    function add(x, y) {
-        x = normalize(x);
-        y = normalize(y);
-        //Put the bigger argument first
-        if (cmp(x, y) < 0) {
-            return add(y, x);
-        } else if (abs(y) === "0") {
-            return x;
-        } else if (cmp(y, "0") < 0) {  // Deal with negative quantities.
-            return (cmp(x, "0") >= 0) ? sub(x, neg(y)) : neg(add(neg(y), neg(x)));
-        } else {
-            // Now it's our main body...
-            return ubig.add(x, y);
-        }
-    }
-
-    //subtraction
-    function sub(x, y) {
-        x = normalize(x);
-        y = normalize(y);
-
-        if (x === y) { //If x == y, return 0
-            return "0";
-        } else if (cmp(x, y) < 0) { // If x < y then switch place and calculate -(y - x)
-            return neg(sub(y, x));
-        } else if (abs(x) === "0") {  // If x == 0, return y
-            return y;
-        } else if (abs(y) === "0") {  // If y == 0, return -x
-            return neg(x);
-        } else if (cmp(y, "0") < 0) {  // Deal with negative quantities.
-            return (cmp(x, "0") >= 0) ? add(x, neg(y)) : sub(neg(y), neg(x));
-        } else {
-            // Now it's our main body...
-            return ubig.subtract(x, y);
-        }
-    }
-
-    //multiplication
-    function mul(x, y) {
-        x = normalize(x);
-        y = normalize(y);
-        if (x === "1") { //If x == 1, return y
-            return y;
-        } else if (y === "1") { //If y == 1, return x
-            return x;
-        } else {
-            return copysign(sgn(x) * sgn(y), ubig.multiply(abs(x), abs(y)));
-        }
-    }
-
-    //floor division
-    function div(x, y) {
-        x = normalize(x);
-        y = normalize(y);
-        if (x === "1") { //compute reciprocal of y
-            if (abs(y) === "0") {
-                divisionByZero();
-            } else if (cmp(y, "0") < 0) {
-                return "-1";
-            } else if (y === "1") {
-                return "1";
-            } else {
-                //floor(1/n) for n>1 is always 0
-                return "0";
-            }
-        } else if (y === "1") { //If y == 1, return x
-            return x;
-        } else if (sgn(x) * sgn(y) === -1) {
-            if (mod(abs(x), abs(y)) === "0") {
-                return copysign(sgn(x) * sgn(y), ubig.longDivision(abs(x), abs(y)));
-            } else {
-                return sub(copysign(sgn(x) * sgn(y), ubig.longDivision(abs(x), abs(y))), "1");
-            }
-        } else {
-            return copysign(sgn(x) * sgn(y), ubig.longDivision(abs(x), abs(y)));
-        }
-    }
-
-    //modulo
-    function mod(x, y) {
-        return sub(x, mul(div(x, y), y));
-    }
-
-    //GCD
-    function gcd(a, b) {
-        if (abs(b) === "0") {
-            return a;
-        }
-
-        return gcd(b, mod(a, b));
-    }
-
-    this.sgn = sgn;
-    this.abs = abs;
-    this.cmp = cmp;
-    this.neg = neg;
-    this.add = add;
-    this.sub = sub;
-    this.mul = mul;
-    this.div = div;
-    this.mod = mod;
-    this.gcd = gcd;
-    this.normalize = normalize;
-    this.copysign = copysign;
-}
 
 
 
 function toInt64(a) {
+    if(typeof a === "number") {
+        return new Int64(Math.trunc(a));
+    } else {
     return new Int64(a);
+    }
 }
 
 function make_MultilineNode(tmp) {
@@ -458,7 +103,7 @@ function make_MultilineNode(tmp) {
 function isNumber(a) { return typeof a === "number"; }
 function toNumber(a) { return isNumber(a) ? a : parseFloat(a); }
 function isinstance(a, b) {
-    return a.parent === b || (a.parent && isinstance(a.parent, b));
+    return a != null && (a.parent === b || (a.parent && isinstance(a.parent, b)));
 }
 
 function get_display_name(a) {
@@ -466,7 +111,6 @@ function get_display_name(a) {
 }
 
 function get_type(a) {
-    // console.log(a.decl_type)
     return a.decl_type || a.parent;
 }
 
@@ -551,7 +195,7 @@ function cmp(a, b) {
     if (isNumber(a) || isNumber(b)) {
         return toNumber(a) < toNumber(b) ? -1 : (toNumber(a) === toNumber(b) ? 0 : 1);
     } else {
-        return toInt64(a).compare(toInt64(b));
+        return toInt64(a).cmp(toInt64(b));
     }
 }
 
@@ -565,105 +209,43 @@ function neg(a) {
     }
 }
 
-
-
-//taken from https://stackoverflow.com/questions/13861254/json-stringify-deep-objects
-// This is based on Douglas Crockford's code ( https://github.com/douglascrockford/JSON-js/blob/master/json2.js )
-(function () {
-    'use strict';
-
-    var DEFAULT_MAX_DEPTH = 6;
-    var DEFAULT_ARRAY_MAX_LENGTH = 50;
-    var seen; // Same variable used for all stringifications
-
-    Date.prototype.toPrunedJSON = Date.prototype.toJSON;
-    String.prototype.toPrunedJSON = String.prototype.toJSON;
-
-    var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-        escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-        meta = {    // table of character substitutions
-            '\b': '\\b',
-            '\t': '\\t',
-            '\n': '\\n',
-            '\f': '\\f',
-            '\r': '\\r',
-            '"': '\\"',
-            '\\': '\\\\'
-        };
-
-    function quote(string) {
-        escapable.lastIndex = 0;
-        return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
-            var c = meta[a];
-            return typeof c === 'string'
-                ? c
-                : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
-        }) + '"' : '"' + string + '"';
-    }
-
-    function str(key, holder, depthDecr, arrayMaxLength) {
-        var i,          // The loop counter.
-            k,          // The member key.
-            v,          // The member value.
-            length,
-            partial,
-            value = holder[key];
-        if (value && typeof value === 'object' && typeof value.toPrunedJSON === 'function') {
-            value = value.toPrunedJSON(key);
+//taken from https://locutus.io/php/strings/ord/
+function ord(string) {
+    //  discuss at: https://locutus.io/php/ord/
+    // original by: Kevin van Zonneveld (https://kvz.io)
+    // bugfixed by: Onno Marsman (https://twitter.com/onnomarsman)
+    // improved by: Brett Zamir (https://brett-zamir.me)
+    //    input by: incidence
+    //   example 1: ord('K')
+    //   returns 1: 75
+    //   example 2: ord('\uD800\uDC00'); // surrogate pair to create a single Unicode character
+    //   returns 2: 65536
+    const str = string + ''
+    const code = str.charCodeAt(0)
+    if (code >= 0xD800 && code <= 0xDBFF) {
+        // High surrogate (could change last hex to 0xDB7F to treat
+        // high private surrogates as single characters)
+        const hi = code
+        if (str.length === 1) {
+            // This is just a high surrogate with no following low surrogate,
+            // so we return its value;
+            return code
+            // we could also throw an error as it is not a complete character,
+            // but someone may want to know
         }
-
-        switch (typeof value) {
-            case 'string':
-                return quote(value);
-            case 'number':
-                return isFinite(value) ? String(value) : 'null';
-            case 'boolean':
-            case 'null':
-                return String(value);
-            case 'object':
-                if (!value) {
-                    return 'null';
-                }
-                if (depthDecr <= 0 || seen.indexOf(value) !== -1) {
-                    return '"-pruned-"';
-                }
-                seen.push(value);
-                partial = [];
-                if (Object.prototype.toString.apply(value) === '[object Array]') {
-                    length = Math.min(value.length, arrayMaxLength);
-                    for (i = 0; i < length; i += 1) {
-                        partial[i] = str(i, value, depthDecr - 1, arrayMaxLength) || 'null';
-                    }
-                    v = partial.length === 0
-                        ? '[]'
-                        : '[' + partial.join(',') + ']';
-                    return v;
-                }
-                for (k in value) {
-                    if (Object.prototype.hasOwnProperty.call(value, k)) {
-                        try {
-                            v = str(k, value, depthDecr - 1, arrayMaxLength);
-                            if (v) partial.push(quote(k) + ':' + v);
-                        } catch (e) {
-                            // this try/catch due to some "Accessing selectionEnd on an input element that cannot have a selection." on Chrome
-                        }
-                    }
-                }
-                v = partial.length === 0
-                    ? '{}'
-                    : '{' + partial.join(',') + '}';
-                return v;
-        }
+        const low = str.charCodeAt(1)
+        return ((hi - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000
     }
-
-    JSON.pruned = function (value, depthDecr, arrayMaxLength) {
-        seen = [];
-        depthDecr = depthDecr || DEFAULT_MAX_DEPTH;
-        arrayMaxLength = arrayMaxLength || DEFAULT_ARRAY_MAX_LENGTH;
-        return str('', { '': value }, depthDecr, arrayMaxLength);
-    };
-}());
-
+    if (code >= 0xDC00 && code <= 0xDFFF) {
+        // Low surrogate
+        // This is just a low surrogate with no preceding high surrogate,
+        // so we return its value;
+        return code
+        // we could also throw an error as it is not a complete character,
+        // but someone may want to know
+    }
+    return code
+}
 
 function or(items) {
     return items.slice(0, -1).join(", ") + " or " + items[items.length - 1];
@@ -777,9 +359,9 @@ var KEYWORDS = [
     "const",
     "import",
     "as",
-    "export"
+    "export",
+    "namespace"
 ];
-
 
 function Token(type_, value = null, pos_start = null, pos_end = null) {
     if (pos_end === null) pos_end = pos_start !== null ? clone(pos_start).advance() : null;
@@ -841,10 +423,10 @@ Lexer.prototype.generate_tokens = function () {
             this.advance();
         } else if (this.current_char === "/") {
             var tok = this.generate_div();
-            if(tok) {
-            tokens.push(tok);
+            if (tok) {
+                tokens.push(tok);
             }
-            // console.log(tok)
+
         } else if (this.current_char === "%") {
             tokens.push(new Token(TokenType.MOD, null, this.pos));
             this.advance();
@@ -866,7 +448,7 @@ Lexer.prototype.generate_tokens = function () {
         } else if (this.current_char === "]") {
             tokens.push(new Token(TokenType.RSQUARE, null, this.pos));
             this.advance();
-        }  else if (this.current_char === ",") {
+        } else if (this.current_char === ",") {
             tokens.push(new Token(TokenType.COMMA, null, this.pos));
             this.advance();
         } else if (this.current_char === ".") {
@@ -945,12 +527,15 @@ Lexer.prototype.generate_string = function () {
 
     var escape_characters = {
         "n": "\n",
-        "t": "\t"
+        "t": "\t",
+        "r": "\r",
+        '"': '"'
     };
 
     while (this.current_char !== null && (this.current_char != '"' || escape_character)) {
         if (escape_character) {
             string += escape_characters[this.current_char] || this.current_char;
+            escape_character = false;
         } else {
             if (this.current_char == '\\')
                 escape_character = true;
@@ -959,7 +544,6 @@ Lexer.prototype.generate_string = function () {
         }
 
         this.advance()
-        escape_character = false;
     }
 
     this.advance();
@@ -1061,11 +645,15 @@ Lexer.prototype.generate_div = function () {
     this.advance();
 
     if (this.current_char === "*") {
-        while(this.current_char !== null && !(this.current_char === "/")) {    
+        var flag = false;
+        while (this.current_char !== null) {
+            if (this.current_char === "*") flag = true;
             this.advance();
+            if (flag && this.current_char === "/") break;
         }
 
-        this.advance();        
+        this.advance();
+
 
     } else {
         return new Token(TokenType.DIV, null, pos_start, this.pos);
@@ -1271,6 +859,14 @@ function WhileNode(cond, expr) {
     this.pos_end = this.expr.pos_end;
 }
 
+function NamespaceNode(var_name_tok, body) {
+    this.var_name_tok = var_name_tok;
+    this.body = body;
+    this.pos_start = this.var_name_tok.pos_start;
+    this.pos_end = this.body.pos_end;
+}
+
+
 function ImportNode(filename, name) {
     this.filename = filename;
     this.name = name;
@@ -1357,6 +953,17 @@ Parser.prototype.advance = function () {
     return this.current_tok;
 }
 
+Parser.prototype.advance2 = function () {
+    this.advance();
+    this.advance_newline();
+}
+
+Parser.prototype.advance_newline = function () {
+    if (this.current_tok.type === TokenType.NEWLINE)
+        this.advance();
+}
+
+
 Parser.prototype.reverse = function () {
     this.tok_idx--;
     if (this.tok_idx < this.tokens.length && this.tok_idx >= 0) {
@@ -1410,7 +1017,6 @@ Parser.prototype.if_expr = function () {
 
 
     var if_expr = res.register(this.code());
-    // console.log(code)
     if (res.error) return res;
 
     if (this.current_tok.type !== TokenType.RCURLY) {
@@ -1480,7 +1086,6 @@ Parser.prototype.for_expr = function () {
     var expr1 = res.register(this.expr());
     if (res.error) return res;
 
-    // console.log("stuff", this.current_tok.type)
     if (this.current_tok.type !== TokenType.NEWLINE) {
         return res.failure(new InvalidSyntaxError(
             this.current_tok.pos_start, this.current_tok.pos_end,
@@ -1492,7 +1097,6 @@ Parser.prototype.for_expr = function () {
     var expr2 = res.register(this.expr());
     if (res.error) return res;
 
-    // console.log("stuff",this.current_tok.type)
     // res.register(this.advance());
     if (this.current_tok.type !== TokenType.NEWLINE) {
         return res.failure(new InvalidSyntaxError(
@@ -1565,7 +1169,6 @@ Parser.prototype.while_expr = function () {
 
 
     var body = res.register(this.code());
-    // console.log(code)
     if (res.error) return res;
 
     if (this.current_tok.type !== TokenType.RCURLY) {
@@ -1588,33 +1191,33 @@ Parser.prototype.attribute_expr = function () {
 
     var result = atom;
     while (this.current_tok.type === TokenType.DOT || this.current_tok.type === TokenType.LSQUARE) {
-        if(this.current_tok.type === TokenType.DOT) {
-        res.register(this.advance());
-        if (this.current_tok.type !== TokenType.IDENTIFIER && this.current_tok.type !== TokenType.KEYWORD) {
-            return res.failure(new InvalidSyntaxError(
-                this.current_tok.pos_start, this.current_tok.pos_end,
-                "Expected identifier"
-            ));
+        if (this.current_tok.type === TokenType.DOT) {
+            res.register(this.advance());
+            if (this.current_tok.type !== TokenType.IDENTIFIER && this.current_tok.type !== TokenType.KEYWORD) {
+                return res.failure(new InvalidSyntaxError(
+                    this.current_tok.pos_start, this.current_tok.pos_end,
+                    "Expected identifier"
+                ));
+            }
+
+            var tok = this.current_tok;
+            result = new DotNode(result, tok);
+            res.register(this.advance());
+        } else {
+            res.register(this.advance());
+
+            var prop = res.register(this.expr());
+
+            result = new KeyNode(result, prop);
+            if (this.current_tok.type !== TokenType.RSQUARE) {
+                return res.failure(new InvalidSyntaxError(
+                    this.current_tok.pos_start, this.current_tok.pos_end,
+                    'Expected "]"'
+                ));
+            }
+
+            res.register(this.advance());
         }
-
-        var tok = this.current_tok;
-        result = new DotNode(result, tok);
-        res.register(this.advance());
-    } else {
-        res.register(this.advance());
-
-        var prop = res.register(this.expr());
-
-        result = new KeyNode(result, prop);
-        if(this.current_tok.type !== TokenType.RSQUARE) {
-            return res.failure(new InvalidSyntaxError(
-                this.current_tok.pos_start, this.current_tok.pos_end,
-                'Expected "]"'
-            ));
-        }
-
-        res.register(this.advance());
-    }
     }
 
 
@@ -1629,25 +1232,26 @@ Parser.prototype.call = function () {
 
     var result = attribute_expr;
     while (this.current_tok.type === TokenType.LPAREN) {
-        res.register(this.advance());
+        res.register(this.advance2());
 
         var arg_nodes = [];
 
         if (this.current_tok.type == TokenType.RPAREN) {
-            res.register(this.advance());
+            res.register(this.advance2());
             attribute_expr = new CallNode(attribute_expr, arg_nodes);
         } else {
             arg_nodes.push(res.register(this.expr()))
             if (res.error) return res;
 
+            res.register(this.advance_newline());
             while (this.current_tok.type == TokenType.COMMA) {
-                res.register(this.advance());
+                res.register(this.advance2());
 
                 arg_nodes.push(res.register(this.expr()))
                 if (res.error) return res;
             }
 
-
+            res.register(this.advance_newline());
             if (this.current_tok.type != TokenType.RPAREN) {
                 return res.failure(new InvalidSyntaxError(
                     this.current_tok.pos_start, this.current_tok.pos_end,
@@ -1655,7 +1259,7 @@ Parser.prototype.call = function () {
                 ))
             }
 
-            res.register(this.advance());
+            res.register(this.advance2());
             attribute_expr = new CallNode(attribute_expr, arg_nodes);
         }
     }
@@ -1806,23 +1410,72 @@ Parser.prototype.block_expr = function () {
     return res.success(new BlockNode(code));
 }
 
+Parser.prototype.namespace_expr = function () {
+    var res = new ParseResult();
+
+    res.register(this.advance());
+    if (this.current_tok.type !== TokenType.IDENTIFIER) {
+        return res.failure(new InvalidSyntaxError(
+            this.current_tok.pos_start, this.current_tok.pos_end,
+            "Expected identifier"
+        ));
+    }
+
+    var var_name_tok = this.current_tok;
+
+    res.register(this.advance());    
+    if (this.current_tok.type !== TokenType.LCURLY) {
+        return res.failure(new InvalidSyntaxError(
+            this.current_tok.pos_start, this.current_tok.pos_end,
+            'Expected "{"'
+        ));
+    }
+
+    res.register(this.advance());
+    var tok = this.current_tok;
+    if (this.current_tok.type === TokenType.RCURLY) {
+        res.register(this.advance());
+        return res.success(new NamespaceNode(var_name_tok, new MultilineNode(
+            [new EmptyNode(tok.pos_start)],
+            tok.pos_start,
+            tok.pos_start
+        )));
+    }
+
+
+    var code = res.register(this.code());
+    if (res.error) return res;
+
+    if (this.current_tok.type !== TokenType.RCURLY) {
+        return res.failure(new InvalidSyntaxError(
+            this.current_tok.pos_start, this.current_tok.pos_end,
+            'Expected "}"'
+        ));
+    }
+
+
+
+    res.register(this.advance());
+    return res.success(new NamespaceNode(var_name_tok, code));
+}
+
 Parser.prototype.atom = function () {
     var res = new ParseResult();
 
     var tok = this.current_tok;
-    if ([TokenType.PLUS, TokenType.MINUS].includes(tok.type)) {
-        res.register(this.advance());
+    if ([TokenType.PLUS, TokenType.MINUS, TokenType.NOT].includes(tok.type)) {
+        res.register(this.advance2());
         var attribute_expr = res.register(this.attribute_expr());
         if (res.error) return res;
 
         return res.success(new UnaryOpNode(tok, attribute_expr));
     } else if (tok.type === TokenType.LCURLY) {
         var pos_start = this.current_tok.pos_start;
-        res.register(this.advance());
+        res.register(this.advance2());
 
         var pairs = [];
         if (this.current_tok.type == TokenType.RCURLY) {
-            res.register(this.advance());
+            res.register(this.advance2());
             return res.success(new ObjectNode(
                 pairs,
                 pos_start,
@@ -1840,14 +1493,16 @@ Parser.prototype.atom = function () {
                 ));
             }
 
-            res.register(this.advance());
+            res.register(this.advance2());
             var value = res.register(this.expr());
             if (res.error) return res;
 
             pairs.push([key, value]);
 
+            if (this.current_tok.type === TokenType.NEWLINE) res.register(this.advance());
+
             while (this.current_tok.type === TokenType.COMMA) {
-                res.register(this.advance());
+                res.register(this.advance2());
 
                 var key = res.register(this.expr());
                 if (res.error) return res;
@@ -1859,14 +1514,14 @@ Parser.prototype.atom = function () {
                     ));
                 }
 
-                res.register(this.advance());
+                res.register(this.advance2());
                 var value = res.register(this.expr());
                 if (res.error) return res;
 
                 pairs.push([key, value]);
             }
 
-
+            res.register(this.advance_newline());
             if (this.current_tok.type != TokenType.RCURLY) {
                 return res.failure(new InvalidSyntaxError(
                     this.current_tok.pos_start, this.current_tok.pos_end,
@@ -1874,7 +1529,7 @@ Parser.prototype.atom = function () {
                 ))
             }
 
-            res.register(this.advance());
+            res.register(this.advance2());
             return res.success(new ObjectNode(
                 pairs,
                 pos_start,
@@ -1891,7 +1546,7 @@ Parser.prototype.atom = function () {
         return res.success(new StringNode(tok));
     } else if (tok.type === TokenType.LPAREN) {
         var pos_start = clone(this.current_tok.pos_start);
-        res.register(this.advance());
+        res.register(this.advance2());
         if (this.current_tok.type === TokenType.RPAREN) {
             res.register(this.advance());
             return res.success(new TupleNode(
@@ -1904,9 +1559,9 @@ Parser.prototype.atom = function () {
         var expr = res.register(this.expr());
 
         if (this.current_tok.type === TokenType.COMMA) {
-            res.register(this.advance());
+            res.register(this.advance2());
             if (this.current_tok.type === TokenType.RPAREN) {
-                res.register(this.advance());
+                res.register(this.advance2());
                 return res.success(new TupleNode(
                     [expr],
                     pos_start,
@@ -1918,7 +1573,7 @@ Parser.prototype.atom = function () {
                 res.register(this.reverse());
 
                 while (this.current_tok.type == TokenType.COMMA) {
-                    res.register(this.advance());
+                    res.register(this.advance2());
 
                     elements.push(res.register(this.expr()))
                     if (res.error) return res;
@@ -1931,10 +1586,10 @@ Parser.prototype.atom = function () {
                     ))
                 }
 
-                res.register(this.advance());
+                res.register(this.advance2());
                 return res.success(new TupleNode(
-                    elements, 
-                    pos_start, 
+                    elements,
+                    pos_start,
                     this.current_tok.pos_end
                 ));
             }
@@ -1951,7 +1606,6 @@ Parser.prototype.atom = function () {
         res.register(this.advance());
         return res.success(new NumberNode(tok));
     } else {
-        console.log(tok)
         return res.failure(new InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
             "Expected " + or(["int", "long", "double", "identifier", '"+"', '"-"', '"("'])
@@ -2030,9 +1684,9 @@ Parser.prototype.expr = function () {
         if (res.error) return res;
         return res.success(for_expr);
     } else if (this.current_tok.matches(TokenType.KEYWORD, "do")) {
-        var block_expr = res.register(this.block_expr());
+        var namespace_expr = res.register(this.block_expr());
         if (res.error) return res;
-        return res.success(block_expr);
+        return res.success(namespace_expr);
     } else if (this.current_tok.matches(TokenType.KEYWORD, "return")) {
         res.register(this.advance());
         var expr = res.register(this.expr());
@@ -2054,10 +1708,10 @@ Parser.prototype.expr = function () {
 
         var filename = res.register(this.atom());
 
-        if(res.error) return res;
+        if (res.error) return res;
 
 
-        if(!this.current_tok.matches(TokenType.KEYWORD, "as")) {
+        if (!this.current_tok.matches(TokenType.KEYWORD, "as")) {
             return res.failure(new InvalidSyntaxError(
                 this.current_tok.pos_start, this.current_tok.pos_end,
                 'Expected "as"'
@@ -2065,7 +1719,7 @@ Parser.prototype.expr = function () {
         }
 
         res.register(this.advance());
-        if(this.current_tok.type !== TokenType.IDENTIFIER) {
+        if (this.current_tok.type !== TokenType.IDENTIFIER) {
             return res.failure(new InvalidSyntaxError(
                 this.current_tok.pos_start, this.current_tok.pos_end,
                 "Expected identifier"
@@ -2073,10 +1727,14 @@ Parser.prototype.expr = function () {
         }
 
         var name = this.current_tok;
-        
+
         res.register(this.advance());
         return res.success(new ImportNode(filename, name));
-    }  else if (this.current_tok.type === TokenType.IDENTIFIER
+    } else if(this.current_tok.matches(TokenType.KEYWORD, "namespace")) {
+        var namespace_expr = res.register(this.namespace_expr());
+        if (res.error) return res;
+        return res.success(namespace_expr); 
+    } else if (this.current_tok.type === TokenType.IDENTIFIER
         && next
         && next.type === TokenType.IDENTIFIER
         && second_next
@@ -2158,7 +1816,6 @@ Parser.prototype.code = function () {
             if (res.error) return res;
             if (this.current_tok.type === TokenType.RCURLY) break;
             var line = res.register(this.expr());
-            // console.log(res.error ? res.error.details : null);
             if (res.error) return res;
 
             lines.push(line);
@@ -2176,7 +1833,7 @@ Parser.prototype.bin_op = function (func, ops) {
 
     while (ops.includes(this.current_tok.type)) {
         var op_tok = this.current_tok;
-        res.register(this.advance());
+        res.register(this.advance2());
 
         var right = res.register(func.call(this));
         if (res.error) return res;
@@ -2234,12 +1891,17 @@ Int32.prototype.toString = function () {
 
 
 function Int64(v) {
-    if(v instanceof Int32) v = v.v;
-
-    if (v instanceof Int64)
+    if (v instanceof BaseObject && v.value) v = v.value;
+    if (v instanceof Int32) v = v.v;
+    if (v instanceof Int64) {
         this.v = v.v;
-    else
-        this.v = bigInt(v).mod(bigInt("18446744073709551616"));
+    } else {
+        v = bigInt(v);
+        if (v.compare(bigInt("9223372036854775808")) >= 0)
+            v = v.subtract(bigInt("18446744073709551616"));
+
+        this.v = v.mod(bigInt("18446744073709551616"));
+    }
 }
 
 Int64.prototype.add = function (other) {
@@ -2269,7 +1931,7 @@ Int64.prototype.mod = function (other) {
 
 Int64.prototype.cmp = function (other) {
     other = new Int64(other);
-    return this.v.cmp(other.v);
+    return this.v.compare(other.v);
 }
 
 Int64.prototype.toString = function () {
@@ -2338,6 +2000,14 @@ BaseObject.prototype.set = function (key, value) {
     }
 }
 
+
+BaseObject.prototype.delete = function (key) {
+    var index = this.keys.indexOf("" + key);
+    if(index !== -1 && !this.is_const[index]) {
+        this.keys.splice(index, 1);
+        this.values.splice(index, 1);
+    }
+}
 
 BaseObject.prototype.set_const = function (key, value) {
     if (typeof key !== "string") {
@@ -2415,7 +2085,6 @@ BaseObject.prototype.flat_get = function (key) {
 
 
 BaseObject.prototype.add = function (other) {
-    // console.log(this)
     if (this.get("plus") instanceof Func) {
         return this.get("plus").execute([this, other]);
     } else {
@@ -2466,7 +2135,7 @@ BaseObject.prototype.neg = function () {
 
 BaseObject.prototype.execute = function (args) {
     if (this.get("execute") instanceof Func) {
-        return this.get("execute").execute([this, args], this.pos_start, this.pos_end);
+        return this.get("execute").execute([this, new Tuple(args).set_pos(this.pos_start, this.pos_end).set_context(context)], this.pos_start, this.pos_end);
     } else {
         return [null, this.illegal_operation(this)];
     }
@@ -2504,9 +2173,15 @@ BaseObject.prototype.or = function () {
     }
 }
 
-BaseObject.prototype.is = function (other) {
-    return [new Bool(get_id(this) === get_id(other)), null];
+
+BaseObject.prototype.not = function () {
+    if (this.get("not") instanceof Func) {
+        return this.get("not").execute([this]);
+    } else {
+        return [null, this.illegal_operation(this)];
+    }
 }
+
 
 BaseObject.prototype.eq = function (other) {
     if (this.get("eq") instanceof Func) {
@@ -2518,8 +2193,8 @@ BaseObject.prototype.eq = function (other) {
 
 
 BaseObject.prototype.ne = function (other) {
-    if (this.get("neq") instanceof Func) {
-        return this.get("neq").execute([this, other]);
+    if (this.get("ne") instanceof Func) {
+        return this.get("ne").execute([this, other]);
     } else {
         return [new Bool(this !== other), null];
     }
@@ -2560,7 +2235,7 @@ BaseObject.prototype.gte = function (other) {
 BaseObject.prototype.illegal_operation = function (other) {
     return new RTError(
         this.pos_start, other.pos_end,
-        "Illegal operation",
+        "illegal operation",
         this.context
     );
 }
@@ -2569,7 +2244,6 @@ BaseObject.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
     if (this.get("toString") !== object_meta.get("toString")
         && this.get("toString") instanceof Func) {
         var result = this.get("toString").execute([this]);
-        // console.log(result+"")
         if (!result[1]) return "" + result[0];
     }
 
@@ -2580,13 +2254,25 @@ BaseObject.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
         return "{...}";
     }
 
+
     var result = [];
+    var flag = false;
     for (var i = 0; i < k.length; i++) {
+        if (i >= DEFAULT_TUPLE_MAX_LENGTH) {
+            flag = true;
+            break;
+        }
+
+
         var key = k[i], value = v[i];
         if (key === "proto") continue;
         result.push(key + ": " + value.toString(depthDecr - 1));
     }
 
+
+    if (flag) {
+        result[result.length - 1] += "...";
+    }
     return "{" + result.join(", ") + "}";
 }
 
@@ -2594,7 +2280,7 @@ var object_meta = new BaseObject(null);
 object_meta.display_name = "object";
 
 var namespace_meta = new BaseObject(object_meta);
-namespace_meta.display_name = "namespace";
+namespace_meta.display_name = "ns";
 
 var num_meta = new BaseObject(object_meta);
 num_meta.display_name = "number";
@@ -2631,6 +2317,14 @@ function Namespace(parent = namespace_meta) {
 }
 
 util.inherits(Namespace, BaseObject);
+Namespace.prototype.toString = function(depthDecr=DEFAULT_MAX_DEPTH) {
+    var o = new BaseObject();
+    o.keys = this.keys;
+    o.values = this.values;
+    o.parent = this.parent;
+    
+    return "namespace "+o.toString(depthDecr);
+}
 
 function Num(value) {
     BaseObject.call(this, num_meta);
@@ -2703,19 +2397,35 @@ Num.prototype.mod = function (other) {
 
 
 Num.prototype.lt = function (other) {
-    return [new Bool(cmp(this, other) < 0), null];
+    if (other instanceof Num) {
+        return [new Bool(cmp(this, other) < 0), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
 }
 
 Num.prototype.lte = function (other) {
-    return [new Bool(cmp(this, other) <= 0), null];
+    if (other instanceof Num) {
+        return [new Bool(cmp(this, other) <= 0), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
 }
 
 Num.prototype.gt = function (other) {
-    return [new Bool(cmp(this, other) > 0), null];
+    if (other instanceof Num) {
+        return [new Bool(cmp(this, other) > 0), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
 }
 
 Num.prototype.gte = function (other) {
-    return [new Bool(cmp(this, other) >= 0), null];
+    if (other instanceof Num) {
+        return [new Bool(cmp(this, other) >= 0), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
 }
 
 
@@ -2888,12 +2598,22 @@ BaseString.prototype.add = function (other) {
 }
 
 BaseString.prototype.mul = function (other) {
-    if (other instanceof Integer || other instanceof Long) {
+    if (other instanceof Integer) {
         return [new BaseString(new Array(Math.max(0, toNumber(other.value)) + 1).join(this.str)), null];
     } else {
         return [null, this.illegal_operation(other)];
     }
 }
+
+BaseString.prototype.eq = function (other) {
+    return [new Bool(get_id(this) === get_id(other)), null];
+}
+
+BaseString.prototype.ne = function (other) {
+    return [new Bool(get_id(this) !== get_id(other)), null];
+}
+
+
 
 BaseString.prototype.toString = function () {
     return this.str;
@@ -2902,15 +2622,29 @@ BaseString.prototype.toString = function () {
 function Tuple(elements) {
     BaseObject.call(this, tuple_meta);
     this.elements = Object.freeze(elements);
-    for(var i = 0; i < elements.length; i++) {
+    for (var i = 0; i < elements.length; i++) {
+        this.set_const(-(elements.length-i), elements[i]);
+    }
+
+    for (var i = 0; i < elements.length; i++) {
         this.set_const(i, elements[i]);
     }
+
+
 }
 
 util.inherits(Tuple, BaseObject);
 Tuple.prototype.add = function (other) {
-    if(other instanceof Tuple) {
+    if (other instanceof Tuple) {
         return [new Tuple(this.elements.concat(other.elements)), null];
+    } else {
+        return [null, this.illegal_operation(other)];
+    }
+}
+
+Tuple.prototype.mul = function (other) {
+    if (other instanceof Integer) {
+        return [new Tuple(Array(Math.max(0, toNumber(other.value))).fill(this.elements).flat(1)), null];
     } else {
         return [null, this.illegal_operation(other)];
     }
@@ -2918,32 +2652,33 @@ Tuple.prototype.add = function (other) {
 
 
 
-Tuple.prototype.toString = function (depthDecr=DEFAULT_MAX_DEPTH) {
+
+Tuple.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
     if (depthDecr < 0) {
         return "(...)";
-    } else if(this.elements.length === 0) {
+    } else if (this.elements.length === 0) {
         return "()";
-    }  else if(this.elements.length === 1) {
-        return "("+this.elements[0].toString(depthDecr-1)+",)";
+    } else if (this.elements.length === 1) {
+        return "(" + this.elements[0].toString(depthDecr - 1) + ",)";
     } else {
-    var flag = false;
-    var result = [];
-    for (var i = 0; i < this.elements.length; i++) {
-        if(i >= DEFAULT_TUPLE_MAX_LENGTH) {
-            flag = true;
-            break;
+        var flag = false;
+        var result = [];
+        for (var i = 0; i < this.elements.length; i++) {
+            if (i >= DEFAULT_TUPLE_MAX_LENGTH) {
+                flag = true;
+                break;
+            }
+
+            var item = this.elements[i];
+            result.push(item.toString(depthDecr - 1));
         }
 
-        var item = this.elements[i];
-        result.push(item.toString(depthDecr-1));
-    }
+        if (flag) {
+            result[result.length - 1] += "...";
+        }
 
-    if(flag) {
-        result[result.length - 1] += "...";
+        return "(" + result.join(", ") + ")";
     }
-
-    return "(" + result.join(", ") + ")";
-}
 }
 
 
@@ -3015,7 +2750,7 @@ Interpreter.prototype.visit_ExportNode = function (context, node) {
     var res = new RTResult();
     var value = res.register(this.visit(context, node.node));
     if (res.error) return res;
-    global_scope.set("__exports", value);
+    global_scope.set("_exports", value);
     return res.success(value);
 }
 
@@ -3027,32 +2762,31 @@ Interpreter.prototype.visit_ImportNode = function (context, node) {
     var name = node.name.value;
 
     var fname = "" + filename;
-    if(ASSOSCATIONS[fname]) fname = ASSOSCATIONS[fname];
+    if (PACKAGES[fname]) fname = PACKAGES[fname];
 
     var [_, error] = skink(fname, new Namespace(context.scope));
-    if(error) return res.failure(error);
+    if (error) return res.failure(error);
 
-    var value = global_scope.get("__exports");
-    if(value == null) { value = new Void().set_pos(node.pos_start, node.pos_end).set_context(context); }
+    var value = global_scope.get("_exports");
+    if (value == null) { value = new Void().set_pos(node.pos_start, node.pos_end).set_context(context); }
 
-    if(res.error) return res;
+    if (res.error) return res;
 
     var old_value = context.scope.get(name);
-    if(old_value != null) {
-    //If there is a declaration type stored up, then use that, otherwise look at prototype (parent)
-    var var_type = old_value.decl_type || old_value.parent;
+    if (old_value != null) {
+        //If there is a declaration type stored up, then use that, otherwise look at prototype (parent)
+        var var_type = old_value.decl_type || old_value.parent;
 
-    if (!isinstance(value, var_type)) {
-        return res.failure(new RTError(
-            node.pos_start, node.pos_end,
-            "cannot convert " + get_display_name(get_type(value)) + " to " + get_display_name(var_type),
-            context
-        ));
+        if (!isinstance(value, var_type)) {
+            return res.failure(new RTError(
+                node.pos_start, node.pos_end,
+                "cannot convert " + get_display_name(get_type(value)) + " to " + get_display_name(var_type),
+                context
+            ));
+        }
+
     }
 
-}
-
-    // console.log(old_value.context.scope.keys, old_value.context.scope.is_const)
     context.scope.set(name, value);
 
     return res.success(value);
@@ -3069,6 +2803,7 @@ Interpreter.prototype.visit_BlockNode = function (context, node, display_name = 
         if (i >= 1 && node.node.lines[i] instanceof EmptyNode) continue;
         var result = res.register(this.visit(new_context, node.node.lines[i]));
         if (res.error) return res;
+
         if (result._shouldBeReturned) {
             return res.success(result);
         }
@@ -3077,6 +2812,39 @@ Interpreter.prototype.visit_BlockNode = function (context, node, display_name = 
     return res.success(new Void().set_pos(node.pos_start, node.pos_end).set_context(context));
 }
 
+
+Interpreter.prototype.visit_NamespaceNode = function (context, node) {
+    var res = new RTResult();
+    var name = node.var_name_tok.value;
+
+    var new_context = new Context("namespace "+quote(name), context, node.pos_start);
+    new_context.scope = new Namespace(context.scope);
+
+    
+    for (var i = 0; i < node.body.lines.length; i++) {
+        if (i >= 1 && node.node.lines[i] instanceof EmptyNode) continue;
+        res.register(this.visit(new_context, node.body.lines[i]));
+        if (res.error) return res;
+    }
+
+    var ns = new_context.scope;
+    var old_value = context.scope.get(name);
+
+    if (old_value != null && !isinstance(old_value, namespace_meta)) {
+        return res.failure(new RTError(
+            node.pos_start, node.pos_end,
+            "cannot convert ns to " + get_display_name(get_type(old_value)),
+            context
+        ));
+    }
+
+    ns.set_pos(node.pos_start, node.pos_end)
+    ns.set_context(context)
+
+    context.scope.set(name, ns);
+
+    return res.success(ns);
+}
 
 Interpreter.prototype.visit_EmptyNode = function (context, node) {
     return new RTResult().success(new Void().set_pos(node.pos_start, node.pos_end).set_context(context));
@@ -3131,13 +2899,12 @@ Interpreter.prototype.visit_StringNode = function (context, node) {
 Interpreter.prototype.visit_TupleNode = function (context, node) {
     var res = new RTResult();
     var elements = new Array(node.elements.length);
-    for(var i = 0; i < node.elements.length; i++) {
+    for (var i = 0; i < node.elements.length; i++) {
         var item = res.register(this.visit(context, node.elements[i]));
-        if(res.error) return res;
+        if (res.error) return res;
 
         elements[i] = item;
     }
-    // console.log(elements)
     return res.success(
         new Tuple(elements)
             .set_pos(node.pos_start, node.pos_end)
@@ -3219,6 +2986,7 @@ Interpreter.prototype.visit_VarAssignNode = function (context, node) {
     }
 
     value.set_decl_type(var_type);
+    value.display_name = var_name;
     context.scope.set(var_name, value);
 
     return res.success(value);
@@ -3252,6 +3020,8 @@ Interpreter.prototype.visit_ConstAssignNode = function (context, node) {
     }
 
     value.set_decl_type(var_type);
+    value.display_name = var_name;
+
     context.scope.set_const(var_name, value);
 
     return res.success(value);
@@ -3270,6 +3040,7 @@ Interpreter.prototype.visit_VarReassignNode = function (context, node) {
         if (res.error) return res;
 
         var prop = node.var_name.prop_tok.value;
+
         var old_value = obj.get(prop);
 
         if (old_value != null) {
@@ -3280,10 +3051,39 @@ Interpreter.prototype.visit_VarReassignNode = function (context, node) {
                     context
                 ));
             } else {
+                value.display_name = prop;
                 obj.set(prop, value);
                 return res.success(value);
             }
         } else {
+            value.display_name = prop;
+            obj.set(prop, value);
+            return res.success(value);
+        }
+    } else if (node.var_name instanceof KeyNode) {
+        var obj = res.register(this.visit(context, node.var_name.obj_node));
+        if (res.error) return res;
+
+        var prop = res.register(this.visit(context, node.var_name.prop_node));
+        if(res.error) return res;
+
+
+        var old_value = obj.get(prop);
+
+        if (old_value != null) {
+            if (!isinstance(value, get_type(old_value))) {
+                return res.failure(new RTError(
+                    value.pos_start, value.pos_end,
+                    "cannot convert " + get_display_name(get_type(value)) + " to " + get_display_name(get_type(old_value)),
+                    context
+                ));
+            } else {
+                value.display_name = prop;
+                obj.set(prop, value);
+                return res.success(value);
+            }
+        } else {
+            value.display_name = prop;
             obj.set(prop, value);
             return res.success(value);
         }
@@ -3309,7 +3109,6 @@ Interpreter.prototype.visit_VarReassignNode = function (context, node) {
 
         //If there is a declaration type stored up, then use that, otherwise look at prototype (parent)
         var var_type = old_value.decl_type || old_value.parent;
-
         if (!isinstance(value, var_type)) {
             return res.failure(new RTError(
                 node.pos_start, node.pos_end,
@@ -3318,10 +3117,10 @@ Interpreter.prototype.visit_VarReassignNode = function (context, node) {
             ));
         }
 
+        value.display_name = var_name;
 
         value.set_decl_type(var_type);
         value.set_context(old_value.context);
-        // console.log(old_value.context.scope.keys, old_value.context.scope.is_const)
         old_value.context.scope.set(var_name, value);
 
         return res.success(value);
@@ -3393,6 +3192,8 @@ Interpreter.prototype.visit_UnaryOpNode = function (context, node) {
 
     if (node.op_tok.type === TokenType.MINUS) {
         [number, error] = number.neg();
+    } else if (node.op_tok.type === TokenType.NOT) {
+        [number, error] = number.not();
     }
 
     if (error) return res.failure(error);
@@ -3428,12 +3229,12 @@ Interpreter.prototype.visit_IfNode = function (context, node) {
 
 Interpreter.prototype.visit_WhileNode = function (context, node) {
     var res = new RTResult();
-
-    var new_context = new Context("while expression", context, node.pos_start);
-    new_context.scope = new Namespace(context.scope);
-
     var accum = [];
     while (true) {
+        var new_context = new Context("while expression", context, node.pos_start);
+        new_context.scope = new Namespace(context.scope);
+        
+
         var cond = res.register(this.visit(new_context, node.cond));
         if (res.error) return res;
 
@@ -3447,12 +3248,12 @@ Interpreter.prototype.visit_WhileNode = function (context, node) {
 
         if (!cond.value) break;
 
-        var expr = res.register(this.visit(context, node.expr));
+        var expr = res.register(this.visit(new_context, node.expr));
         if (res.error) return res;
         accum.push(expr);
     }
 
-    return res.success(accum[accum.length - 1]);
+    return res.success(accum.length === 0 ? new Void().set_pos(node.pos_start, node.pos_end).set_context(context) : accum[accum.length - 1]);
 }
 
 
@@ -3575,9 +3376,10 @@ Interpreter.prototype.visit_FuncDeclNode = function (context, node) {
             new_context.scope.set(arg_name, args[i]);
         }
 
-        var [result, error] = self.visit(new_context, new BlockNode(node.body)).toArray();
-        if (error) return [null, error];
 
+        var [result, error] = self.visit(new_context, new BlockNode(node.body), new_context.display_name).toArray();
+        if (error) return [null, error];
+        
         if (!(isinstance(result, return_type))) {
             return [null, new RTError(
                 result.pos_start, result.pos_end,
@@ -3646,7 +3448,6 @@ Interpreter.prototype.visit_CallNode = function (context, node) {
             args.push(arg);
         }
 
-        // console.log(value_to_call.is_method, node.node_to_call.constructor.name);
         if (value_to_call.is_method && node.node_to_call instanceof DotNode) {
             var temp = res.register(this.visit(context, node.node_to_call.obj_node));
             if (res.error) return res;
@@ -3656,10 +3457,13 @@ Interpreter.prototype.visit_CallNode = function (context, node) {
         var [result, error] = value_to_call.execute(args, node.pos_start, node.pos_end);
         if (error) return res.failure(error);
 
-        return res.success(result.set_pos(node.pos_start, node.pos_end));
+        result.set_pos(node.pos_start, node.pos_end);
+        if(!result.context) result.set_context(context);
+
+        return res.success(result);
     } catch (e) {
         //Deal with stack errors
-        if (e instanceof RangeError) {
+        if (e instanceof RangeError && e.message.includes("exceeded")) {
             return res.failure(new RTError(
                 node.pos_start, node.pos_end,
                 "maximum recursion depth exceeded",
@@ -3687,7 +3491,6 @@ Interpreter.prototype.visit_DotNode = function (context, node) {
             result.set_context(context);
         }
 
-        // console.log(tmp.context);
 
         return res.success(result.set_pos(node.pos_start, node.pos_end));
 
@@ -3704,7 +3507,7 @@ Interpreter.prototype.visit_KeyNode = function (context, node) {
     var prop = res.register(this.visit(context, node.prop_node));
     if (res.error) return res;
 
-    
+
     var result = obj.get(prop);
     if (result == null) {
         return res.success(new Void().set_pos(node.pos_start, node.pos_end).set_context(context));
@@ -3714,7 +3517,6 @@ Interpreter.prototype.visit_KeyNode = function (context, node) {
             result.set_context(context);
         }
 
-        // console.log(tmp.context);
 
         return res.success(result.set_pos(node.pos_start, node.pos_end));
 
@@ -3729,7 +3531,10 @@ Interpreter.prototype.visit_KeyNode = function (context, node) {
 var global_scope = new Namespace();
 global_scope.set_const("global", global_scope);
 global_scope.set_const("true", new Bool(true));
-global_scope.set_const("false", new Bool(false));
+global_scope.set_const("false", new Bool(true));
+global_scope.set_const("VOID", new Void());
+global_scope.set("_exports", new Void());
+
 
 global_scope.set_const("int", int_meta);
 global_scope.set_const("long", long_meta);
@@ -3740,367 +3545,265 @@ global_scope.set_const("object", object_meta);
 global_scope.set_const("ns", namespace_meta);
 global_scope.set_const("void", void_meta);
 global_scope.set_const("func", func_meta);
-global_scope.set_const("VOID", new Void());
 global_scope.set_const("bool", bool_meta);
 global_scope.set_const("tuple", tuple_meta);
-global_scope.set("__exports", new Void());
 
 global_scope.set("print", new Func(function (args) {
-    var a = args[0];
+    var [a] = args;
     process.stdout.write("" + a);
     return [new Void(), null];
 }, 1, "print"));
 
-
 global_scope.set("println", new Func(function (args) {
-    var a = args[0];
+    var [a] = args;
     console.log("" + a);
     return [new Void(), null];
 }, 1, "println"));
 
+
 object_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    return [a, null];
+   var [a] = args;
+   return [a, null];
 }, 1, "new"));
 
-object_meta.set("containsKey", new Func(function (args) {
-    var [self, key] = args;
-    return [new Bool(self.get("" + key) != null), null];
-}, 2, "containsKey", true))
+object_meta.set("clear", new Func(function (args) {
+    var [self] = args;
+    self.keys.length = 0;
+    self.values.length = 0;
+    return [new Void(), null];
+}, 1, "clear", true));
 
-object_meta.set("containsValue", new Func(function (args) {
-    var [self, value] = args;
-    return [new Bool(self.containsValue(value)), null];
-}, 2, "containsKey", true))
+
+object_meta.set("clone", new Func(function (args) {
+    var [self] = args;
+    var result = {
+        "__proto__": self.__proto__,
+        "keys": self.keys,
+        "values": self.values,
+        "value": self.value,
+        "str": self.str,
+        "elements": self.elements
+    };
+
+   return [result, null];
+}, 1, "clone", true));
+
+
+object_meta.set("has", new Func(function (args) {
+    var [self, key] = args;
+    return [new Bool(self.get(key) != null), null];
+}, 2, "has", true));
+
+object_meta.set("getKeys", new Func(function (args) {
+    var [self] = args;
+    return [new Tuple(self.keys.map((el) => new BaseString(el))), null];
+}, 1, "getKeys", true));
+
+object_meta.set("getValues", new Func(function (args) {
+    var [self] = args;
+    return [new Tuple(self.values), null];
+}, 1, "getValues", true));
+
+object_meta.set("remove", new Func(function (args) {
+    var [self, key] = args;
+    var index = self.keys.indexOf("" + key);
+    if(index !== -1) {
+        self.keys.splice(index, 1);
+        self.values.splice(index, 1);
+    }
+
+    return [new Void(), null];
+}, 2, "remove", true));
 
 
 object_meta.set("toString", new Func(function (args) {
-    var self = args[0];
+    var [self] = args;
     return [new BaseString("" + self), null];
-}, 1, "toString", true))
+}, 1, "toString", true));
 
-
-
-num_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, number_meta)) {
-        return [a, null];
-    } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to number",
-                this.context
-            )
-        ]
-    }
-
-}, 1, "new"));
-
-int_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, int_meta)) {
-        return [a, null];
-    } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to int",
-                this.context
-            )
-        ]
-    }
-
-}, 1, "new"));
-
-int_meta.set_const("MIN_VALUE", new Integer(new Int32(-2147483648)));
-int_meta.set_const("MAX_VALUE", new Integer(new Int32(2147483647)));
-
-double_meta.set_const("MAX_VALUE", new Double(Number.MAX_VALUE));
-double_meta.set_const("NEGATIVE_INFINITY", new Double(-Infinity));
-double_meta.set_const("POSITIVE_INFINITY", new Double(+Infinity));
-double_meta.set_const("NaN", new Double(NaN));
-
-
-long_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, long_meta)) {
-        return [a, null];
-    } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to long",
-                this.context
-            )
-        ]
-    }
-
-}, 1, "new"));
-
-double_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, double_meta)) {
-        return [a, null];
-    } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to double",
-                this.context
-            )
-        ]
-    }
-
-}, 1, "new"));
 
 bool_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, bool_meta)) {
+    var [a] = args;
+    if(isinstance(a, bool_meta)) {
         return [a, null];
+    } else if(isinstance(a, string_meta)) {
+        return [new Bool(a.str === "true"), null];
     } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to bool",
-                this.context
-            )
-        ]
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to string or bool",
+            this.context
+        )];
     }
-
 }, 1, "new"));
+
+
+int_meta.set_const("MIN_VALUE", new Integer(new Int32(0x80000000)));
+int_meta.set_const("MAX_VALUE", new Integer(new Int32(0x7fffffff)));
+
+
+int_meta.set("new", new Func(function (args) {
+    var [a] = args;
+    if(isinstance(a, int_meta)) {
+        return [a, null];
+    } else if(isinstance(a, string_meta)) {
+        var parsed = parseInt("" + a);
+        if(Number.isNaN(parsed)) {
+            return [null, new RTError(
+                a.pos_start, a.pos_end,
+                "invalid integer literal: "+quote("" + a),
+                this.context
+            )];
+        } else {
+            return [new Integer(new Int32(parsed)), null];
+        }
+    } else {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to string or int",
+            this.context
+        )];
+    }
+}, 1, "new"));
+
+int_meta.set("longValue", new Func(function (args) {
+    var [self] = args;
+    if(isinstance(self, int_meta)) {
+        return [new Long(toInt64(self.value)), null];
+    } else {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to int",
+            this.context
+        )];
+    }
+}, 1, "longValue", true));
+
+int_meta.set("doubleValue", new Func(function (args) {
+    var [self] = args;
+    if(isinstance(self, int_meta)) {
+        return [new Double(self.value.v), null];
+    } else {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to int",
+            this.context
+        )];
+    }
+}, 1, "doubleValue", true));
+
+
+long_meta.set_const("MIN_VALUE", new Long(bigInt("8000000000000000", 16)));
+long_meta.set_const("MAX_VALUE", new Long(bigInt("7fffffffffffffff", 16)));
+
+long_meta.set("new", new Func(function (args) {
+    var [a] = args;
+    if(isinstance(a, long_meta)) {
+        return [a, null];
+    } else if(isinstance(a, string_meta)) {
+        var parsed = parseInt("" + a);
+        if(Number.isNaN(parsed)) {
+            return [null, new RTError(
+                a.pos_start, a.pos_end,
+                "invalid integer literal: "+quote("" + a),
+                this.context
+            )];
+        } else {
+            return [new Long(bigInt(parsed)), null];
+        }
+    } else {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to string or long",
+            this.context
+        )];
+    }
+}, 1, "new"));
+
+long_meta.set("intValue", new Func(function (args) {
+    var [self] = args;
+    if(isinstance(self, long_meta)) {
+        return [new Integer(new Int32(self.value.v.toJSNumber())), null];
+    } else {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to long",
+            this.context
+        )];
+    }
+}, 1, "intValue", true));
+
+long_meta.set("doubleValue", new Func(function (args) {
+    var [self] = args;
+    if(isinstance(self, long_meta)) {
+        return [new Double(self.value.v.toJSNumber()), null];
+    } else {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to long",
+            this.context
+        )];
+    }
+}, 1, "doubleValue", true));
+
 
 
 
 double_meta.set_const("MIN_VALUE", new Double(Number.MIN_VALUE));
 double_meta.set_const("MAX_VALUE", new Double(Number.MAX_VALUE));
-double_meta.set_const("NEGATIVE_INFINITY", new Double(-Infinity));
-double_meta.set_const("POSITIVE_INFINITY", new Double(+Infinity));
-double_meta.set_const("NaN", new Double(NaN));
 
-void_meta.set("new", new Func(function () { return [new Void(), null]; }, 0, "new"));
-func_meta.set("new", new Func(function () {
-    return [new Func(function () {
-        return [
-            new Void().set_pos(this.pos_start, this.pos_end).set_context(this.context),
-            null
-        ];
-    }, 0).set_pos(this.pos_start, this.pos_end).set_context(this.context), null];
-}, 0, "new"));
-
-string_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, string_meta)) {
+double_meta.set("new", new Func(function (args) {
+    var [a] = args;
+    if(isinstance(a, double_meta)) {
         return [a, null];
-    } else {
-        return [
-            null,
-            new RTError(
+    } else if(isinstance(a, string_meta)) {
+        var parsed = parseFloat("" + a);
+        if(Number.isNaN(parsed)) {
+            return [null, new RTError(
                 a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to string",
+                "invalid floating-point literal: "+quote("" + a),
                 this.context
-            )
-        ]
+            )];
+        } else {
+            return [new Double(parsed), null];
+        }
+    } else {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to string or double",
+            this.context
+        )];
     }
-
 }, 1, "new"));
 
-string_meta.set("toLowerCase", new Func(function (args) {
-    var self = args[0];
-    if (!isinstance(self, string_meta)) {
-        return [
-            null,
-            new RTError(
-                self.pos_start, self.pos_end,
-                "cannot convert " + get_display_name(get_type(self)) + " to string",
-                this.context
-            )
-        ];
-    }
-
-    return [
-        new BaseString(self.str.toLowerCase()),
-        null
-    ];
-}, 1, "toLowerCase", true));
-
-
-string_meta.set("toUpperCase", new Func(function (args) {
-    var self = args[0];
-    if (!isinstance(self, string_meta)) {
-        return [
-            null,
-            new RTError(
-                self.pos_start, self.pos_end,
-                "cannot convert " + get_display_name(get_type(self)) + " to string",
-                this.context
-            )
-        ];
-    }
-
-    return [
-        new BaseString(self.str.toUpperCase()),
-        null
-    ];
-}, 1, "toLowerCase", true));
-
-
-
-string_meta.set("length", new Func(function (args) {
-    var self = args[0];
-    if (!isinstance(self, string_meta)) {
-        return [
-            null,
-            new RTError(
-                self.pos_start, self.pos_end,
-                "cannot convert " + get_display_name(get_type(self)) + " to string",
-                this.context
-            )
-        ];
-    }
-
-    return [
-        new Integer(new Int32(self.str.length)),
-        null
-    ];
-}, 1, "toLowerCase", true));
-
-
-
-
-string_meta.set("indexOf", new Func(function (args) {
-    var [self, str] = args;
-    if (!isinstance(self, string_meta)) {
-        return [
-            null,
-            new RTError(
-                self.pos_start, self.pos_end,
-                "cannot convert " + get_display_name(get_type(self)) + " to string",
-                this.context
-            )
-        ];
-    }
-
-    if (!isinstance(str, string_meta)) {
-        return [
-            null,
-            new RTError(
-                str.pos_start, str.pos_end,
-                'cannot convert ' + get_display_name(get_type(str)) + ' to string',
-                context
-            )
-        ];
-    }
-
-    return [
-        new Integer(new Int32(self.str.indexOf(str.str))),
-        null
-    ];
-}, 2, "indexOf", true));
-
-string_meta.set("lastIndexOf", new Func(function (args) {
-    var [self, str] = args;
-    if (!isinstance(self, string_meta)) {
-        return [
-            null,
-            new RTError(
-                self.pos_start, self.pos_end,
-                "cannot convert " + get_display_name(get_type(self)) + " to string",
-                this.context
-            )
-        ];
-    }
-
-    if (!isinstance(str, string_meta)) {
-        return [
-            null,
-            new RTError(
-                str.pos_start, str.pos_end,
-                'cannot convert ' + get_display_name(get_type(str)) + ' to string',
-                context
-            )
-        ];
-    }
-
-    return [
-        new Integer(new Int32(self.str.lastIndexOf(str.str))),
-        null
-    ];
-}, 2, "lastIndexOf", true));
-
-tuple_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, tuple_meta)) {
-        return [a, null];
+double_meta.set("intValue", new Func(function (args) {
+    var [self] = args;
+    if(isinstance(self, long_meta)) {
+        return [new Integer(new Int32(Math.trunc(self.value))), null];
     } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to tuple",
-                this.context
-            )
-        ]
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to double",
+            this.context
+        )];
     }
+}, 1, "intValue", true));
 
-}, 1, "new"));
-
-tuple_meta.set("last", new Func(function (args) {
-    var self = args[0];
-    if (!isinstance(self, tuple_meta)) {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to tuple",
-                this.context
-            )
-        ]
-    }
-
-    return [self.elements[self.elements.length - 1], null];
-}, 1, "last", true));
-
-namespace_meta.set("new", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, namespace_meta)) {
-        return [a, null];
+double_meta.set("longValue", new Func(function (args) {
+    var [self] = args;
+    if(isinstance(self, double_meta)) {
+        return [new Long(toInt64(self.value)), null];
     } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to ns",
-                this.context
-            )
-        ]
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to double",
+            this.context
+        )];
     }
-
-}, 1, "new"));
-
+}, 1, "longValue", true));
 
 
-string_meta.set("format", new Func(function (args) {
-    var a = args[0];
-    if (isinstance(a, tuple_meta)) {
-        return [new BaseString(a.elements.join("")), null];
-    } else {
-        return [
-            null,
-            new RTError(
-                a.pos_start, a.pos_end,
-                "cannot convert " + get_display_name(get_type(a)) + " to tuple",
-                this.context
-            )
-        ]
-    }
 
-}, 1, "format"));
 
 function run(fn, text, scope = global_scope) {
     //Generate tokens
@@ -4123,6 +3826,271 @@ function run(fn, text, scope = global_scope) {
     return [result.value, result.error];
 }
 
+string_meta.set("new", new Func(function (args) {
+    var [a] = args;
+    if(isinstance(a, string_meta)) {
+        return [a, null];
+    } else {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to string",
+            this.context
+        )];
+    }
+}, 1, "new"));
+
+
+string_meta.set("length", new Func(function (args) {
+    var [self] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    return [new Integer(new Int32(self.str.length)), null];
+}, 1, "length", true));
+
+
+
+string_meta.set("charAt", new Func(function (args) {
+    var [self, index] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    if(!isinstance(index, int_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(index))+" to int",
+            this.context
+        )];
+    }
+
+    var i =  index.value.v;
+    if(i < 0) i += self.str.length;
+
+    return [new BaseString(self.str.charAt(i)), null];
+}, 2, "charAt", true));
+
+
+string_meta.set("indexOf", new Func(function (args) {
+    var [self, str] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    if(!isinstance(str, string_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(str))+" to string",
+            this.context
+        )];
+    }
+
+    var result = self.str.indexOf(str.str);
+    if(result === -1) {
+        return [new Void(), null];
+    } else {
+    return [new Integer(new Int32(result)), null];
+    }
+}, 2, "indexOf", true));
+
+
+string_meta.set("lastIndexOf", new Func(function (args) {
+    var [self, str] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    if(!isinstance(str, string_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(str))+" to string",
+            this.context
+        )];
+    }
+
+    var result = self.str.lastIndexOf(str.str);
+    if(result === -1) {
+        return [new Void(), null];
+    } else {
+    return [new Integer(new Int32(result)), null];
+    }
+}, 2, "lastIndexOf", true));
+
+
+string_meta.set("substring", new Func(function (args) {
+    var [self, beginIndex, endIndex] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    if(!isinstance(beginIndex, int_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(beginIndex))+" to int",
+            this.context
+        )];
+    }
+
+    if(!isinstance(endIndex, int_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(endIndex))+" to int",
+            this.context
+        )];
+    }
+
+    return [new BaseString(self.str.slice(beginIndex.value.v, endIndex.value.v)), null];
+}, 3, "substring", true));
+
+string_meta.set("toLowerCase", new Func(function (args) {
+    var [self] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    return [new BaseString(self.str.toLowerCase()), null];
+}, 1, "toLowerCase", true));
+
+
+
+string_meta.set("toUpperCase", new Func(function (args) {
+    var [self] = args;
+    if(!isinstance(self, string_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to string",
+            this.context
+        )];
+    }
+
+    return [new BaseString(self.str.toUpperCase()), null];
+}, 1, "toUpperCase", true));
+
+tuple_meta.set("new", new Func(function (args) {
+    var [a] = args;
+    if(isinstance(a, tuple_meta)) {
+        return [a, null];
+    } else {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to tuple",
+            this.context
+        )];
+    }
+}, 1, "new"));
+
+tuple_meta.set("length", new Func(function (args) {
+    var [self] = args;
+    if(!isinstance(self, tuple_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to tuple",
+            this.context
+        )];
+    }
+
+    return [new Integer(new Int32(self.elements.length)), null];
+}, 1, "length", true));
+
+
+tuple_meta.set("length", new Func(function (args) {
+    var [self] = args;
+    if(!isinstance(self, tuple_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to tuple",
+            this.context
+        )];
+    }
+
+    return [new Integer(new Int32(self.elements.length)), null];
+}, 1, "length", true));
+
+tuple_meta.set("subtuple", new Func(function (args) {
+    var [self, beginIndex, endIndex] = args;
+    if(!isinstance(self, tuple_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self))+" to tuple",
+            this.context
+        )];
+    }
+
+    if(!isinstance(beginIndex, int_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(beginIndex))+" to int",
+            this.context
+        )];
+    }
+
+    if(!isinstance(endIndex, int_meta)) {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(endIndex))+" to int",
+            this.context
+        )];
+    }
+
+    return [new Tuple(self.elements.slice(beginIndex.value.v, endIndex.value.v)), null];
+}, 3, "subtuple", true));
+
+void_meta.set("new", new Func(function ()  { return [new Void(), null]; }, 0, "new"));
+func_meta.set("new", new Func(function ()  { 
+    return [new Func(function () { return [new Void(), null];}, 0, "<empty>"), null]; 
+}, 0, "new"));
+
+func_meta.set("arity", new Func(function (args)  { 
+    var [self] = args;
+    if(!isinstance(self, func_meta)) {
+        return [null, new RTError(
+            self.pos_start, self.pos_end,
+            "cannot convert "+get_display_name(get_type(self)) + " to func",
+            this.context
+        )];
+    }
+
+    return [new Integer(new Int32(self.num_args)), null]; 
+}, 1, "arity", true));
+
+
+namespace_meta.set("new", new Func(function (args) {
+    var [a] = args;
+    if(isinstance(a, namespace_meta)) {
+        return [a, null];
+    } else {
+        return [null, new RTError(
+            a.pos_start, a.pos_end,
+            "cannot convert "+get_display_name(get_type(a))+" to ns",
+            this.context
+        )];
+    }
+}, 1, "new"));
 
 
 function skink(file, scope = global_scope) {

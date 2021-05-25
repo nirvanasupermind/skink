@@ -1,8 +1,2 @@
-import "fixed" as fixed;
-object Int26_6 = fixed.Int26_6;
-object Int52_12 = fixed.Int52_12;
-
-Int52_12 a = Int52_12.new(8192L);
-Int52_12 b = Int52_12.new(6144L);
-
-println(a * b);
+import "bigint" as BigInt;
+println(BigInt)
