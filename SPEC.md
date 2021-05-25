@@ -67,8 +67,8 @@ Examples of string literals:
 "foo" "bar" "baz" "\n"
 ```
 
-## 2.4.4 Object Literals
-## 2.4.5 Tuple Literals
+### 2.4.4 Object Literals
+### 2.4.5 Tuple Literals
 
 ## 2.5 Comments
 Comments consist of zero or more characters surrounded by the characters `/*` and `*/`. They are ignored by the interpreter.
