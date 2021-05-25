@@ -1,7 +1,7 @@
 # skink
 (WiP)<br>
 Skink is a small, statically typed, interpreted programming language. It emphasizes prototype-based code.<br><br>
-Skink has a large standard library which contains several packages.
+Skink is especially suited to numeric computation and scientific computing.
 
 # Specification
 See [SPEC.md](SPEC.md).
