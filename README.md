@@ -1,4 +1,5 @@
 # skink
+[![npm version](https://badge.fury.io/js/skink.svg)](https://badge.fury.io/js/skink)<br>
 (WiP)<br>
 Skink is a small, statically typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes prototype-based code.
 
