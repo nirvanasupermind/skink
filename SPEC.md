@@ -84,7 +84,7 @@ Examples of comments:
 A line break consists of one or more line break characters, where a line break character is defined as one of the following:
 * the ASCII LF character, also known as "newline"
 * the ASCII CR character, also known as "return"
-* the ASCII semicolon character(`;`)
+* the ASCII semicolon character (`;`)
 
 ## 2.7 Other Tokens
 
