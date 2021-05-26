@@ -2263,7 +2263,7 @@ BaseObject.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
 
 
         var key = k[i], value = v[i];
-        if (key === "proto" || value instanceof Void) continue;
+        if (key === "proto") continue;
         result.push(key + ": " + value.toString(depthDecr - 1));
     }
 
@@ -2696,9 +2696,14 @@ RTResult.prototype.toArray = function () {
 RTResult.prototype.register = function (res) {
     if (res instanceof RTResult) {
         if (res.error) this.error = res.error;
-        if (res.value._shouldBeReturned) {
-            this.success(res.value)
+        if (res.value && res.value._shouldBeReturned) {
+            this.success(res.value);
             this.locked = true;
+        }
+
+        
+        if(res.value && !res.value._shouldBeReturned) {
+            this.locked = false;
         }
 
         return res.value;
@@ -2711,7 +2716,7 @@ RTResult.prototype.success = function (value) {
     if(!this.locked) {
     this.value = value;
     }
-    
+
     return this;
 }
 
@@ -3603,12 +3608,12 @@ object_meta.set("has", new Func(function (args) {
 
 object_meta.set("getKeys", new Func(function (args) {
     var [self] = args;
-    return [new Tuple(self.keys.map((el) => new BaseString(el)).filter((_, i) => !(self.values[i] instanceof Void))), null];
+    return [new Tuple(self.keys.map((el) => new BaseString(el))), null];
 }, 1, "getKeys", true));
 
 object_meta.set("getValues", new Func(function (args) {
     var [self] = args;
-    return [new Tuple(self.values.filter((el) => !(el instanceof Void))), null];
+    return [new Tuple(self.values), null];
 }, 1, "getValues", true));
 
 object_meta.set("remove", new Func(function (args) {

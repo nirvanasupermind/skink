@@ -94,7 +94,7 @@ Other used tokens are:
 
 # 3 Types and Values
 ## 3.1 Objects and Prototypes
-Every value in Skink (including primitives such as numbers and booleans) is an *object*. An object is an ordered collection of key-value pairs called *slots*. All keys must be of the type [`string`](#39-string), while values can be any valid expression. If a non-string key is used in an object, it will 
+Every value in Skink (including primitive values such as numbers and booleans) is an *object*. An object is an ordered collection of key-value pairs called *slots*. All keys must be of the type [`string`](#39-string), while values can be any valid expression. If a non-string key is used in an object, it will 
 automatically be converted to a `string` using the `toString()` special function. Objects are defined using the [object statements](#56-object-statements).
 
 Each slot in an object has an associated type, determined by finding the [prototype](#313-prototypes) of the slot's value. If the type is changed using [property assignment](#312-property-assignment), a runtime error is thrown.
@@ -104,12 +104,14 @@ All objects in Skink are first-class values. This means that all objects can be 
 ### 3.1.1 Property Accessor
 Properties of an object are accessed by name, using either the dot notation
 ```
-<object>.<key>
+object.key
 ```
 or the bracket notation
 ```
-<object>[<key>]
+object[key]
 ```
+
+If a property of an object cannot be found, [VOID](#33-void) will be returned.
 
 ### 3.1.2 Property Assignment
 Properties of an object can be set using either the dot notation
@@ -127,8 +129,7 @@ An object can be the *prototype* of other objects. This copies the slots defined
 
 The prototype of an object can be accessed and mutated at runtime using the built-in `proto` property.
 
-A Skink implementation offers several predefined types, such as integers, floats, strings, booleans, and tuples that can be used as values.
-
+A Skink implementation offers several predefined types, such as integers, floats, strings, booleans, and tuples.
 
 ## 3.2 object
 Type `object` is the default prototype for all objects. See the [Objects and Prototypes](#31-objects-and-prototypes) section for more information about objects.
@@ -137,13 +138,11 @@ Type `object` is the default prototype for all objects. See the [Objects and Pro
 The type `void` represents the null, empty, or non-existent reference. The type `void` has exactly one value, called `VOID`.
 
 ## 3.3 bool
-The type `bool` represents a logical entity and consists of exactly two unique values. One is called `false` and the other is called `false`.
+The type `bool` represents a logical entity and consists of exactly two unique values. One is called `true` and the other is called `false`.
 
 ```java
 bool a = true;
 ```
-
-
 
 ## 3.4 tuple
 The type `tuple` represents a fixed-size collection of heterogeneous values. They can be defined using the [tuple statements](#tuple-statements).
@@ -153,7 +152,7 @@ tuple a = ("a", "b", "c", "d");
 print(a[-1]); /* d */		
 ```
 
-Tuples indexing is done through the [property accessor](#311-property-accessor) syntax. Tuples also support negative indices.
+A tuple object of length `n` will have `2 * n` slots, whose keys correspond to the integers between `-n` and `n+1`, and whose values correspond to the tuple elements.
 
 Manipulating tuples is done through a set of [standard functions](#6-standard-functions).
 
@@ -161,12 +160,58 @@ Manipulating tuples is done through a set of [standard functions](#6-standard-fu
 Type `number` represents an integer or floating-point number. It has the subtypes [`int`][#36-int], [`long`][#37-long], and [`double`][#38-double].
 
 ## 3.6 int
-Type `int` represents a signed 32-bit integer.
+Type `int` represents a 32-bit signed integer.
+```java
+int a = 123;
+int b = 12;
+```
 
 ## 3.7 long
+Type `long` represents a 64-bit signed integer.
+```java
+long a = 123L;
+long b = 75L;
+```
+
 ## 3.8 double
+Type `double` represents a 64-bit IEEE 754 floating-point number.
+```java
+double a = 1.0;
+double b = 0.234;
+```
+
 ## 3.9 string
+Type `string` represents an immutable sequence of characters.
+
+```java
+string a = "I'm a wonderful string\n"
+```
+
+There are several [standard functions](#6-standard-functions) for examining individual characters, for extracting substrings, for creating a copy of a string with all characters translated to uppercase or to lowercase, and so on.
+
 ## 3.10 func
+Type `func` represents functions.
+
+A function declares executable code that can be called, passing a fixed number of values as arguments. 
+
+
+### 3.10.1 Function Calls
+A call expression is used to invoke a function.
+
+The syntax for function calls is:
+```java
+functionName(parameter1, parameter2,...)
+```
+
+### 3.10.2 Function Definitions
+The syntax for function defintions is:
+```java
+returnType functionName(parameter1, parameter2,...) {
+  /* function body */
+}
+```
+
+
 ## 3.11 ns
 ## 3.12 Conversions and Promotions
 
