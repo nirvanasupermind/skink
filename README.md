@@ -16,11 +16,11 @@ $ npm install skink
 ```
 Once you have installed the package you can run the shell from bash using
 ```
-skink
+$ skink
 ```
 and run a file using
 ```
-skink <filename>
+$ skink <filename>
 ```
 
 If you don't have bash, you can use the node API:
