@@ -228,10 +228,9 @@ returnType functionName(parameter1, parameter2,...) {
 ## 5.5 return Statements
 ## 5.6 Object Statements
 ## 5.7 Tuple Statements
-## 5.8 Object Statements
 
-## 5.9 Operators
-## 5.10 Assignment
+## 5.8 Operators
+## 5.9 Assignment
 
 # 6 Standard Functions
 ## 6.1 Global Functions
