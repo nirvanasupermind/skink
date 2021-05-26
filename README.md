@@ -10,7 +10,9 @@ See [SPEC.md](SPEC.md).
 Skink's core is implemented in Node.js. The Skink evaluator executes a typed abstract syntax tree. 
 
 # Usage
-If you have Node installed, the skink package is available from the npm registry
+You need to install Node.js to use the skink implementation.
+
+The skink package is available from the npm registry
 ```
 $ npm install skink
 ```
@@ -25,7 +27,7 @@ $ skink <filename>
 
 If you don't have bash, you can use the node API:
 ```js
-var skink = require("./skink.js");
+var skink = require("skink");
 skink("<filename>");
 ```
 
