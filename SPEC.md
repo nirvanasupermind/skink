@@ -116,11 +116,11 @@ If a property of an object cannot be found, [VOID](#33-void) will be returned.
 ### 3.1.2 Property Assignment
 Properties of an object can be set using either the dot notation
 ```
-<object>.<key> = <value>
+object.key = value
 ```
 or the bracket notation
 ```
-<object>[<key>] = <value>
+object[key] = value
 ```
 
  
