@@ -1,6 +1,6 @@
 {
   "name": "skink",
-  "version": "0.0.33",
+  "version": "0.0.34",
   "description": "C-style programming language with numerical analysis features",
   "main": "src/Skink.js",
   "scripts": {
