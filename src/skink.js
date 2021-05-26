@@ -306,7 +306,6 @@ Position.prototype.advance = function (current_char = null) {
     return this;
 }
 
-
 ///////////////////////////////////////
 //TOKENS
 ///////////////////////////////////////
@@ -527,9 +526,8 @@ Lexer.prototype.generate_string = function () {
 
     var escape_characters = {
         "n": "\n",
-        "t": "\t",
         "r": "\r",
-        '"': '"'
+        "t": "\t",
     };
 
     while (this.current_char !== null && (this.current_char != '"' || escape_character)) {
@@ -1651,14 +1649,14 @@ Parser.prototype.assignment_expr = function () {
     var res = new ParseResult();
     var var_name = res.register(this.or_expr());
     if (res.error) return res;
-    if (this.current_tok.type === TokenType.EQ) {
+    while (this.current_tok.type === TokenType.EQ) {
         res.register(this.advance());
         // res.register(this.advance());
 
         var expr = res.register(this.expr());
         if (res.error) return res;
 
-        return res.success(new VarReassignNode(var_name, expr));
+        var_name = new VarReassignNode(var_name, expr);
     }
 
     return res.success(var_name);
@@ -2265,7 +2263,7 @@ BaseObject.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
 
 
         var key = k[i], value = v[i];
-        if (key === "proto") continue;
+        if (key === "proto" || value instanceof Void) continue;
         result.push(key + ": " + value.toString(depthDecr - 1));
     }
 
@@ -2688,6 +2686,7 @@ Tuple.prototype.toString = function (depthDecr = DEFAULT_MAX_DEPTH) {
 function RTResult() {
     this.error = null;
     this.value = null;
+    this.locked = false;
 }
 
 RTResult.prototype.toArray = function () {
@@ -2697,6 +2696,11 @@ RTResult.prototype.toArray = function () {
 RTResult.prototype.register = function (res) {
     if (res instanceof RTResult) {
         if (res.error) this.error = res.error;
+        if (res.value._shouldBeReturned) {
+            this.success(res.value)
+            this.locked = true;
+        }
+
         return res.value;
     }
 
@@ -2704,7 +2708,10 @@ RTResult.prototype.register = function (res) {
 }
 
 RTResult.prototype.success = function (value) {
+    if(!this.locked) {
     this.value = value;
+    }
+    
     return this;
 }
 
@@ -2743,7 +2750,7 @@ Interpreter.prototype.visit_ReturnNode = function (context, node) {
     var res = new RTResult();
     var value = res.register(this.visit(context, node.node));
     if (res.error) return res;
-    return Object.assign(value, { "_shouldBeReturned": true });
+    return res.success(Object.assign(value, {"_shouldBeReturned": true}));
 }
 
 Interpreter.prototype.visit_ExportNode = function (context, node) {
@@ -3531,7 +3538,7 @@ Interpreter.prototype.visit_KeyNode = function (context, node) {
 var global_scope = new Namespace();
 global_scope.set_const("global", global_scope);
 global_scope.set_const("true", new Bool(true));
-global_scope.set_const("false", new Bool(true));
+global_scope.set_const("false", new Bool(false));
 global_scope.set_const("VOID", new Void());
 global_scope.set("_exports", new Void());
 
@@ -3596,12 +3603,12 @@ object_meta.set("has", new Func(function (args) {
 
 object_meta.set("getKeys", new Func(function (args) {
     var [self] = args;
-    return [new Tuple(self.keys.map((el) => new BaseString(el))), null];
+    return [new Tuple(self.keys.map((el) => new BaseString(el)).filter((_, i) => !(self.values[i] instanceof Void))), null];
 }, 1, "getKeys", true));
 
 object_meta.set("getValues", new Func(function (args) {
     var [self] = args;
-    return [new Tuple(self.values), null];
+    return [new Tuple(self.values.filter((el) => !(el instanceof Void))), null];
 }, 1, "getValues", true));
 
 object_meta.set("remove", new Func(function (args) {

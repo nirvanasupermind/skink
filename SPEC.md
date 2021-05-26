@@ -7,21 +7,19 @@ Skink has a large standard library which contains several packages.
 This chapter specifies the lexical structure of Skink. -->
 
 # 1 Introduction
-Skink is a small, statically typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes prototype-based code.
+Skink is a lightweight, statically typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes prototype-based code.
 
 # 2 Lexical Structure
-This chapter specifies the lexical structure of Skink.
+This section specifies the lexical structure of Skink.
 
 Skink programs are written using the Unicode character set.
 
 ## 2.1 Identifiers
-Identifiers consist of an ASCII letter or an ASCII underscore (`_`), optionally followed by a string of letters, digits, and underscores.
+Identifiers in Skink can be any string of Latin letters, digits, and underscores, not beginning with a digit.
 
+Skink is a case-sensitive language, so `foo` and `Foo` are counted as two distinct identifiers.
 
-The lowercase and uppercase representation of the same alphabetic character are considered different characters. For instance "foo", "Foo" and "fOo" will be treated as 3 distinct identifiers.
-
-
-## 2.2 Keywords
+## 2.2 Reserved Words
 The following words are reserved words by the language and cannot be used as identifiers:
 
 ```
@@ -34,78 +32,137 @@ The following tokens are the Skink operators, formed from ASCII characters:
 ! != % & && &= * + += - -= / /= < <= = == > >= >> 
 ```
 
+## 2.4 String Literals
+String literals consist of zero or more characters enclosed in double quotes. String literals also use the following C-like escape sequences:
+* `\n` for the LF character, also known as "newline"
+* `\r` for the CR character, also known as "return"
+* `\t` for the HT character, also known as "tab"
 
-## 2.4 Literals
-A literal is the source code representation of a value of a type. Literals include integer literals, floating-point literals, string literals, object literals, and tuple literals.
-
-### 2.4.1 Integer Literals
-An integer literal consists of one or more ASCII digits from `0` to `9` optionally suffixed with a letter `L` or `l`, representing a positive integer. 
-
-Examples of integer literals:
+Examples of valid string literals:
 ```
-10 1729 9223372036854775807L
-```
-
-### 2.4.2 Floating-Point Literals
-A floating-point literal has three parts: an integral part (represented by an [integer literal](#241-integer-literals)), a decimal point (represented by an ASCII period character), and an optional fractional part (represented by an integer literal).
-
-Examples of floating point literals:
-```
-0. 10.5 60.0
+"foo"
+"bar"
+"baz"
+"\n"
 ```
 
-### 2.4.3 String Literals
-A string literal consists of zero or more characters enclosed in double quotes. Each character may be represented by an escape sequence. The supported escape sequences are:
-* `\n` for the ASCII LF character, also known as "newline"
-* `\r` for the ASCII CR character, also known as "return"
-* `\t` for the ASCII HT character, also known as "tab"
-* `\"` for the ASCII quote character (`"`)
+## 2.5 Numerical Constants
+*Numerical constants* may be written with an optional decimal part and an optional `L` or `l`. 
 
-
-Examples of string literals:
+Examples of valid numerical literals:
 ```
-"foo" "bar" "baz" "\n"
-```
-
-### 2.4.4 Object Literals
-### 2.4.5 Tuple Literals
-
-## 2.5 Comments
-Comments consist of zero or more characters surrounded by the characters `/*` and `*/`. They are ignored by the interpreter.
-
-Comments cannot nest. 
-
-Examples of comments:
-```
-/* comment 1 * / /* comment 2 * /
-/* 
-    multiline comment
-*/ 
+0
+2
+5.5
+600L
+1111.
 ```
 
-## 2.6 Line Breaks and Whitespace
-A line break consists of one or more line break characters, where a line break character is defined as one of the following:
-* the ASCII LF character, also known as "newline"
-* the ASCII CR character, also known as "return"
-* the ASCII semicolon character (`;`)
-Line breaks are used to divide code into lines.
+## 2.6 Comments
+Skink *comments* start with the characters `/*` and end with the characters `*/` (as in C), and can span multiple lines. They cannot nest, or appear inside strings.
 
-Whitespace consists of one or more whitespace characters, where a whitespace character is defined as one of the following:
-* the ASCII SP character, also known as "space"
-* the ASCII HT character, also known as "tab"
+Comments are ignored by the interpreter.
 
-Whitespace is ignored by the interpreter, with the exception of [literals](#24-literals).
+Examples of valid comments:
+```
+/* comment 1 */
+/* comment 2 */
+/*
+  multiline comment
+*/
+```
 
-## 2.7 Other Tokens
+## 2.7 Whitespace and Line Breaks
+A *line break* consists of one or more line break characters, where a line break character is defined as one of the following:
+* The LF character, also known as "newline"
+* The CR character, also known as "return"
+* A semicolon character (`;`)
+
+Line breaks are used to divide Skink code into lines.
+
+*Whitespace* consists of one or more whitespace characters, where a whitespace character is defined as one of the following:
+* The SP character, also known as "space"
+* The HT character, also known as "tab"
+
+Whitespace is almost always ignored by the interpreter, with the exception of literals.
+
+## 2.8 Other Tokens
+Other used tokens are:
+```
+( ) { } [ ]	. , : 
+```
 
 # 3 Types and Values
 ## 3.1 Objects and Prototypes
+Every value in Skink (including primitives such as numbers and booleans) is an *object*. An object is an ordered collection of key-value pairs called *slots*. All keys must be of the type [`string`](#39-string), while values can be any valid expression. If a non-string key is used in an object, it will 
+automatically be converted to a `string` using the `toString()` special function. Objects are defined using the [object statements](#56-object-statements).
+
+Each slot in an object has an associated type, determined by finding the [prototype](#313-prototypes) of the slot's value. If the type is changed using [property assignment](#312-property-assignment), a runtime error is thrown.
+
+All objects in Skink are first-class values. This means that all objects can be stored in variables, passed as arguments to other functions, and returned as results.
+
+### 3.1.1 Property Accessor
+Properties of an object are accessed by name, using either the dot notation
+```
+<object>.<key>
+```
+or the bracket notation
+```
+<object>[<key>]
+```
+
+### 3.1.2 Property Assignment
+Properties of an object can be set using either the dot notation
+```
+<object>.<key> = <value>
+```
+or the bracket notation
+```
+<object>[<key>] = <value>
+```
+
+ 
+### 3.1.3 Prototypes
+An object can be the *prototype* of other objects. This copies the slots defined in the parent object into the child objects. If an object is used as a prototype of other objects, it is known as *type*. 
+
+The prototype of an object can be accessed and mutated at runtime using the built-in `proto` property.
+
+A Skink implementation offers several predefined types, such as integers, floats, strings, booleans, and tuples that can be used as values.
+
+
 ## 3.2 object
+Type `object` is the default prototype for all objects. See the [Objects and Prototypes](#31-objects-and-prototypes) section for more information about objects.
+
 ## 3.3 void
+The type `void` represents the null, empty, or non-existent reference. The type `void` has exactly one value, called `VOID`.
+
 ## 3.3 bool
+The type `bool` represents a logical entity and consists of exactly two unique values. One is called `false` and the other is called `false`.
+
+```java
+bool a = true;
+```
+
+
+
 ## 3.4 tuple
+The type `tuple` represents a fixed-size collection of heterogeneous values. They can be defined using the [tuple statements](#tuple-statements).
+
+```java
+tuple a = ("a", "b", "c", "d");
+print(a[-1]); /* d */		
+```
+
+Tuples indexing is done through the [property accessor](#311-property-accessor) syntax. Tuples also support negative indices.
+
+Manipulating tuples is done through a set of [standard functions](#6-standard-functions).
+
 ## 3.5 number
+Type `number` represents an integer or floating-point number. It has the subtypes [`int`][#36-int], [`long`][#37-long], and [`double`][#38-double].
+
 ## 3.6 int
+Type `int` represents a signed 32-bit integer.
+
 ## 3.7 long
 ## 3.8 double
 ## 3.9 string
@@ -114,26 +171,28 @@ Whitespace is ignored by the interpreter, with the exception of [literals](#24-l
 ## 3.12 Conversions and Promotions
 
 # 4 Execution Context
-## 4.1 Variables
+## 4.1 Variables and Constants
+### 4.1.1 Pre-Defined Variables
 ## 4.2 Scope Management
 
-# 5 Statements
+# 5 Expressions
 ## 5.1 Closures
 ## 5.2 if Statements
 ## 5.3 while Loops
 ## 5.4 for Loops
 ## 5.5 return Statements
+## 5.6 Object Statements
+## 5.7 Tuple Statements
+## 5.8 Object Statements
 
-# 6 Expressions
-## 6.1 Operators
-## 6.2 Assignment
+## 5.9 Operators
+## 5.10 Assignment
 
-# 7 Standard Functions
-## 7.1 Global Functions
-## 7.2 Member Functions
+# 6 Standard Functions
+## 6.1 Global Functions
 
-# 8 Modules
-## 8.1 Creating Modules
-## 8.2 Importing Modules
+# 7 Modules
+## 7.1 Creating Modules
+## 7.2 Importing Modules
 
-# 9 Standard Modules
+# 8 Standard Modules
