@@ -1,34 +1,12 @@
 # skink
-[![npm version](https://badge.fury.io/js/skink.svg)](https://badge.fury.io/js/skink)<br>
-(WiP)<br>
 Skink is a small, statically typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes prototype-based code.
 
 # Specification
 See [SPEC.md](SPEC.md).
 
 # Implementation
-Skink's core is implemented in Node.js. The Skink evaluator executes a typed abstract syntax tree. 
+Skink's core is implemented in Python. The Skink evaluator executes a typed abstract syntax tree. 
 
-# Installation and Usage
-You first need to install Node.js if you don't already have it.
-
-After installing Node.js, install skink from npm
-```
-$ npm install skink
-```
-Once you have installed the package you can run the shell from bash using
-```
-$ skink
-```
-and run a file using
-```
-$ skink <filename>
-```
-
-If you don't have bash, you can use the node API:
-```js
-var skink = require("skink");
-skink("<filename>");
-```
-
+# Use
+In order to use this implementation of Skink, you must have the [https://www.python.org](Python) and [https://pypi.org/](pip) installed.
 

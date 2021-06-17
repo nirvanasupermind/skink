@@ -1,2 +1,0 @@
-import "bigint" as BigInt;
-println(BigInt)
