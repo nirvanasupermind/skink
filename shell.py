@@ -4,7 +4,7 @@ while True:
 
     if text == 'exit': break
 
-    result, error = skink.run(text)
+    result, error = skink.run('<stdin>', text)
     if(error): 
         print(error.as_string())
     else:
