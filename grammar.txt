@@ -1,0 +1,3 @@
+expr: term ((PLUS|MINUS) term)*
+term: atom ((PLUS|MINUS) atom)*
+atom: INT|LONG|FLOAT|DOUBLE
