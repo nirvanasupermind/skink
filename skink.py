@@ -10,7 +10,10 @@ import numpy as np
 # CONSTANTS
 #######################################
 DIGITS = '0123456789'
-
+I32_MIN_VALUE = -2147483648
+I32_MAX_VALUE = 2147483647
+I64_MIN_VALUE = -9223372036854775808
+I64_MAX_VALUE = 9223372036854775807
 
 #######################################
 # UTILITY FUNCTIONS
@@ -66,6 +69,7 @@ class Position:
 #######################################
 TT_INT		= 'INT'
 TT_LONG     = 'LONG'
+TT_FLOAT    = 'FLOAT'
 TT_DOUBLE   = 'DOUBLE'
 TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
@@ -145,11 +149,15 @@ class Lexer:
     def make_number(self):
         num_str = ''
         l_count = 0
+        f_count = 0
         dot_count = 0
-        while self.current_char != None and self.current_char in (DIGITS + 'Ll.'):
+        while self.current_char != None and self.current_char in (DIGITS + 'LlFf.'):
             if self.current_char in 'Ll':
                 if l_count == 1: break # there are no "long long"s yet
                 l_count += 1
+            elif self.current_char in 'Ff':
+                if f_count == 1: break
+                f_count += 1
             elif self.current_char == '.':
                 if dot_count == 1: break
                 dot_count += 1
@@ -158,13 +166,16 @@ class Lexer:
                 num_str += self.current_char
             self.advance()
         
+        if f_count == 1: # float
+            return Token(TT_FLOAT, np.float32(num_str))
         if dot_count == 1: # double
             return Token(TT_DOUBLE, float(num_str))
         elif l_count == 1: # long
-            # todo: handle "Python int too large to convert to C long" here
-            return Token(TT_LONG, np.int64(num_str))
+            clipped_num = np.clip(float(num_str), I64_MIN_VALUE, I64_MAX_VALUE)
+            return Token(TT_LONG, np.int64(clipped_num))
         else: # int
-            return Token(TT_INT, np.int32(num_str))
+            clipped_num = np.clip(float(num_str), I32_MIN_VALUE, I32_MAX_VALUE)
+            return Token(TT_INT, np.int32(clipped_num))
     
 
 
