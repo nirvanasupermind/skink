@@ -1,0 +1,23 @@
+class Vec2 {
+    Void constructor(Vec2 this, Double a, Double b) {
+        this.a = a;
+        this.b = b;
+    }
+
+    Vec2 plus(Vec2 this, Vec2 other) {
+        return Vec2(this.x + other.x, this.y + other.y);
+    }
+    
+    Vec2 minus(Vec2 this, Vec2 other) {
+        return Vec2(this.x - other.x, this.y - other.y);
+    }
+        
+    Vec2 uminus(Vec2 this, Vec2 other) {
+        return Vec2(-this.x, -this.y);
+    }
+
+    String toString(Vec2 this) {
+        return "(#{this.x}, #{this.y})";
+    }
+}
+
