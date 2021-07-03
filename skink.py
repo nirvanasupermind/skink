@@ -4,6 +4,7 @@
 #######################################
 # IMPORTS
 #######################################
+from typing import KeysView
 import numpy as np
 
 #######################################
@@ -18,7 +19,15 @@ I64_MAX_VALUE = 9223372036854775807
 #######################################
 # UTILITY FUNCTIONS
 #######################################
-def get_type(x): return type(x)
+def get_parent(a):
+    return a if a.parent == None else a
+
+def instanceof(a, b):
+    if isinstance(a, SkinkObject):
+        return get_parent(a) == b
+    else:
+        return isinstance(a, b)
+
 
 #######################################
 # ERRORS
@@ -43,6 +52,10 @@ class IllegalCharError(LangError):
 class InvalidSyntaxError(LangError):
     def __init__(self, pos_start, pos_end, details):
         super().__init__(pos_start, pos_end, 'Invalid Syntax', details)
+
+class RTError(LangError):
+    def __init__(self, pos_start, pos_end, details):
+        super().__init__(pos_start, pos_end, 'Runtime Error', details)
 
 
 #######################################
@@ -323,6 +336,43 @@ class Parser:
 
         return res.success(left)
 
+#######################################
+# VALUES
+#######################################
+class SkinkObject:
+    def __init__(self, parent=None):
+        self.keys = []
+        self.values = []
+        self.parent = parent
+        
+        self.pos_start = None
+        self.pos_end = None
+
+    def set_pos(self, pos_start, pos_end):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+        return self
+    
+    def get(self, key):
+        if not key in self.keys:
+            if self.parent != None: 
+                return self.parent.get(key)
+            else:
+                return None
+        else:
+            idx = self.keys.index(key)
+            result = self.values[idx]
+            return result
+                
+            
+    def set(self, key, value):
+        if not key in self.keys:
+            self.keys.append(key)
+            self.values.append(value)
+        else:
+            idx = self.keys.index(key)
+            self.values[idx] = value
+            return value
 
 
 #######################################
@@ -346,9 +396,8 @@ class Interpreter:
         self.visit(node.right_node)
 
     def visit_UnaryOpNode(self, node):
-        self.visit(node.left_node)
-        self.visit(node.right_node)
         print('Found un op node!')
+        self.visit(node.node)
 
     
 #######################################
