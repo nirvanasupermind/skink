@@ -329,27 +329,46 @@ class Parser:
 # INTERPRETER
 #######################################
 class Interpreter:
-	def visit(self, node):
-		method_name = f'visit_{type(node).__name__}'
-		method = getattr(self, method_name, self.no_visit_method)
-		return method(node)
+    def visit(self, node):
+        method_name = f'visit_{type(node).__name__}'
+        method = getattr(self, method_name, self.no_visit_method)
+        return method(node)
 
-	def no_visit_method(self, node):
-		raise Exception(f'No visit_{type(node).__name__} method defined')
+    def no_visit_method(self, node):
+        raise Exception(f'No visit_{type(node).__name__} method defined')
 
+    def visit_NumberNode(self, node):
+        print('Found number node!')
+    
+    def visit_BinOpNode(self, node):
+        print('Found bin op node!')        
+        self.visit(node.left_node)
+        self.visit(node.right_node)
 
+    def visit_UnaryOpNode(self, node):
+        self.visit(node.left_node)
+        self.visit(node.right_node)
+        print('Found un op node!')
+
+    
 #######################################
 # RUN
 #######################################
 
 def run(fn, text):
-		# Generate tokens
-		lexer = Lexer(fn, text)
-		tokens, error = lexer.make_tokens()
-		if error: return None, error
-		
-		# Generate AST
-		parser = Parser(tokens)
-		ast = parser.parse()
+	# Generate tokens
+	lexer = Lexer(fn, text)
+	tokens, error = lexer.make_tokens()
+	if error: return None, error
+	
+	# Generate AST
+	parser = Parser(tokens)
+	ast = parser.parse()
+	if ast.error: return None, ast.error
 
-		return ast.node, ast.error
+	# Run program
+	interpreter = Interpreter()
+	# context = Context('<program>')
+	result = interpreter.visit(ast.node)
+
+	return None, None
