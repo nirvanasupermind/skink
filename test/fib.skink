@@ -1,0 +1,11 @@
+int fib(int n) {
+    if(n <= 1) { 
+        return 1;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+
+println(fib(6) == 13); 
+println(fib(7) == 21); 
+

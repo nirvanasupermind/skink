@@ -4,7 +4,6 @@
 #######################################
 # IMPORTS
 #######################################
-from typing import KeysView
 import numpy as np
 
 #######################################
@@ -19,14 +18,6 @@ I64_MAX_VALUE = 9223372036854775807
 #######################################
 # UTILITY FUNCTIONS
 #######################################
-def get_parent(a):
-    return a if a.parent == None else a
-
-def instanceof(a, b):
-    if isinstance(a, SkinkObject):
-        return get_parent(a) == b
-    else:
-        return isinstance(a, b)
 
 
 #######################################
@@ -208,6 +199,8 @@ class Lexer:
 class NumberNode:
     def __init__(self, tok):
         self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
     
     def __repr__(self):
         return f'{self.tok}'
@@ -217,17 +210,23 @@ class BinOpNode:
         self.left_node = left_node
         self.op_tok = op_tok
         self.right_node = right_node
+
+        self.pos_start = left_node.pos_start
+        self.pos_end = right_node.pos_end
     
     def __repr__(self):
         return f'({self.left_node}, {self.op_tok}, {self.right_node})'
 
 class UnaryOpNode:
-	def __init__(self, op_tok, node):
-		self.op_tok = op_tok
-		self.node = node
+    def __init__(self, op_tok, node):
+        self.op_tok = op_tok
+        self.node = node
 
-	def __repr__(self):
-		return f'({self.op_tok}, {self.node})'
+        self.pos_start = self.op_tok.pos_start
+        self.pos_end = self.node.pos_end
+
+    def __repr__(self):
+        return f'({self.op_tok}, {self.node})'
 
 #######################################
 # PARSE RESULT
@@ -339,41 +338,37 @@ class Parser:
 #######################################
 # VALUES
 #######################################
-class SkinkObject:
-    def __init__(self, parent=None):
-        self.keys = []
-        self.values = []
-        self.parent = parent
-        
-        self.pos_start = None
-        self.pos_end = None
+class Value: pass
+class Number(Value):
+    def __init__(self, value):
+        self.value = value
+        self.set_pos()
 
-    def set_pos(self, pos_start, pos_end):
+    def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
         self.pos_end = pos_end
         return self
     
-    def get(self, key):
-        if not key in self.keys:
-            if self.parent != None: 
-                return self.parent.get(key)
-            else:
-                return None
-        else:
-            idx = self.keys.index(key)
-            result = self.values[idx]
-            return result
-                
-            
-    def set(self, key, value):
-        if not key in self.keys:
-            self.keys.append(key)
-            self.values.append(value)
-        else:
-            idx = self.keys.index(key)
-            self.values[idx] = value
-            return value
+    def added_to(self, other):
+        if isinstance(other, Number):
+            return Number(self.value + other.value)
 
+    def subbed_by(self, other):
+        if isinstance(other, Number):
+            return Number(self.value - other.value)
+
+    def multed_by(self, other):
+        if isinstance(other, Number):
+            return Number(self.value * other.value)
+
+    def dived_by(self, other):
+        if isinstance(other, Number):
+            if isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
+                return Number(self.value // other.value)
+            return Number(self.value / other.value)
+    
+    def __repr__(self):
+        return f'{self.value}'
 
 #######################################
 # INTERPRETER
@@ -388,12 +383,24 @@ class Interpreter:
         raise Exception(f'No visit_{type(node).__name__} method defined')
 
     def visit_NumberNode(self, node):
-        print('Found number node!')
+        # print('Found number node!')
+        return Number(node.tok.value).set_pos(node.pos_start, node.pos_end)
     
     def visit_BinOpNode(self, node):
-        print('Found bin op node!')        
-        self.visit(node.left_node)
-        self.visit(node.right_node)
+        # print('Found bin op node!')        
+        left = self.visit(node.left_node)
+        right = self.visit(node.right_node)
+        result = None
+        if node.op_tok.type == TT_PLUS:
+            result = left.added_to(right)
+        elif node.op_tok.type == TT_MINUS:
+            result = left.subbed_by(right)
+        elif node.op_tok.type == TT_MUL:
+            result = left.multed_by(right)
+        elif node.op_tok.type == TT_DIV:
+            result = left.dived_by(right) 
+        return result  
+                      
 
     def visit_UnaryOpNode(self, node):
         print('Found un op node!')
@@ -403,8 +410,7 @@ class Interpreter:
 #######################################
 # RUN
 #######################################
-
-def run(fn, text):
+def runText(fn, text):
 	# Generate tokens
 	lexer = Lexer(fn, text)
 	tokens, error = lexer.make_tokens()
@@ -420,4 +426,6 @@ def run(fn, text):
 	# context = Context('<program>')
 	result = interpreter.visit(ast.node)
 
-	return None, None
+	return result, None
+
+	
