@@ -545,6 +545,12 @@ class Number(Value):
     def negated(self):
         return Number(-self.value).set_context(self.context).set_type(self.type)
 
+    def copy(self):
+        copy = Number(self.value)
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+        return copy
+
     def __repr__(self):
         return f'{self.value}'
 
@@ -583,7 +589,7 @@ class Context:
         self.display_name = display_name
         self.parent = parent
         self.parent_entry_pos = parent_entry_pos
-
+        self.symbol_table = None
 
 
 #######################################
@@ -643,6 +649,21 @@ class Interpreter:
 
         return res.success(num)
     
+    def visit_VarAccessNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+        value = context.symbol_table.get(var_name)
+
+        if not value:
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f"'{var_name}' is not defined",
+                context
+            ))
+
+        value = value.copy().set_pos(node.pos_start, node.pos_end)
+        return res.success(value)
+
     def visit_BinOpNode(self, node, context):
         # print('Found bin op node!')  
         res = RTResult()
@@ -689,22 +710,25 @@ class Interpreter:
 #######################################
 # RUN
 #######################################
+global_symbol_table = SymbolTable()
+global_symbol_table.set("zero", Number(0))
+
 def run_text(fn, text):
-	# Generate tokens
-	lexer = Lexer(fn, text)
-	tokens, error = lexer.make_tokens()
-	if error: return None, error
-	
-	# Generate AST
-	parser = Parser(tokens)
-	ast = parser.parse()
-	if ast.error: return None, ast.error
+    # Generate tokens
+    lexer = Lexer(fn, text)
+    tokens, error = lexer.make_tokens()
+    if error: return None, error
 
-	# Run program
-	interpreter = Interpreter()
-	context = Context('<program>')
-	result = interpreter.visit(ast.node, context)
+    # Generate AST
+    parser = Parser(tokens)
+    ast = parser.parse()
+    if ast.error: return None, ast.error
 
-	return result.value, result.error
+    # Run program
+    interpreter = Interpreter()
+    context = Context('<program>')
+    context.symbol_table = global_symbol_table
 
-	
+    result = interpreter.visit(ast.node, context)
+
+    return result.value, result.error
