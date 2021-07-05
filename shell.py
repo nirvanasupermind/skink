@@ -1,4 +1,9 @@
 import skink
+try:
+    import readline
+except:
+    pass #readline not available
+
 while True:
     text = input('> ')
 

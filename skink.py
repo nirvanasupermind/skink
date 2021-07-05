@@ -5,11 +5,14 @@
 # IMPORTS
 #######################################
 import numpy as np
+import string
 
 #######################################
 # CONSTANTS
 #######################################
 DIGITS = '0123456789'
+LETTERS = string.ascii_letters + '_'
+LETTERS_DIGITS = LETTERS + DIGITS
 I32_MIN_VALUE = -2147483648
 I32_MAX_VALUE = 2147483647
 I64_MIN_VALUE = -9223372036854775808
@@ -107,7 +110,13 @@ TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_EQ  = 'EQ'
+TT_IDENTIFIER  = 'IDENTIFIER'
+TT_KEYWORD  = 'KEYWORD'
 TT_EOF = 'EOF'
+KEYWORDS = [
+    
+]
 
 class Token:
 		def __init__(self, type_, value=None, pos_start=None, pos_end=None):
@@ -149,6 +158,8 @@ class Lexer:
                 self.advance()
             elif self.current_char in DIGITS:
                 tokens.append(self.make_number())
+            elif self.current_char in LETTERS:
+                tokens.append(self.make_identifier())
             elif self.current_char == '+':
                 tokens.append(Token(TT_PLUS, pos_start=self.pos))
                 self.advance()
@@ -166,6 +177,9 @@ class Lexer:
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '=':
+                tokens.append(Token(TT_EQ, pos_start=self.pos))
                 self.advance()
             else:
                 # return some error
@@ -205,12 +219,23 @@ class Lexer:
         if dot_count == 1: # double
             return Token(TT_DOUBLE, float(num_str), pos_start=pos_start, pos_end=self.pos )
         elif l_count == 1: # long
-            clipped_num = np.clip(float(num_str), I64_MIN_VALUE, I64_MAX_VALUE)
+            clipped_num = np.clip(int(num_str), I64_MIN_VALUE, I64_MAX_VALUE)
             return Token(TT_LONG, np.int64(clipped_num), pos_start=pos_start, pos_end=self.pos)
         else: # int
-            clipped_num = np.clip(float(num_str), I32_MIN_VALUE, I32_MAX_VALUE)
+            clipped_num = np.clip(int(num_str), I32_MIN_VALUE, I32_MAX_VALUE)
             return Token(TT_INT, np.int32(clipped_num), pos_start=pos_start, pos_end=self.pos )
-    
+
+    def make_identifier(self):
+        id_str = ''
+        pos_start = self.pos.copy()
+
+        while self.current_char != None and self.current_char in LETTERS_DIGITS + '_':
+            id_str += self.current_char
+            self.advance()
+
+        tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
+        return Token(tok_type, id_str, pos_start, self.pos)
+
 
 
 #######################################
@@ -221,9 +246,26 @@ class NumberNode:
         self.tok = tok
         self.pos_start = tok.pos_start
         self.pos_end = tok.pos_end
-    
+
     def __repr__(self):
         return f'{self.tok}'
+
+class VarAccessNode:
+	def __init__(self, var_name_tok):
+		self.var_name_tok = var_name_tok
+
+		self.pos_start = self.var_name_tok.pos_start
+		self.pos_end = self.var_name_tok.pos_end
+
+class VarAssignNode:
+    def __init__(self, type_node, var_name_tok, value_node):
+        self.type_node = type_node
+        self.var_name_tok = var_name_tok
+        self.value_node = value_node
+
+        self.pos_start = self.type_node.pos_start
+        self.pos_end = self.value_node.pos_end
+
 
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
@@ -288,7 +330,6 @@ class Parser:
         if self.tok_idx < len(self.tokens):
             self.current_tok = self.tokens[self.tok_idx]
         return self.current_tok
-    
 
     def parse(self):
         res = self.expr()
@@ -310,10 +351,14 @@ class Parser:
             factor = res.register(self.atom())
             if res.error: return res
             return res.success(UnaryOpNode(tok, factor))
-        
+
         elif tok.type in (TT_INT, TT_LONG, TT_FLOAT, TT_DOUBLE):
             res.register(self.advance())
             return res.success(NumberNode(tok))
+
+        elif tok.type in (TT_IDENTIFIER):
+            res.register(self.advance())
+            return res.success(VarAccessNode(tok))
 
         elif tok.type == TT_LPAREN:
             res.register(self.advance())
@@ -325,16 +370,35 @@ class Parser:
             else:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected ')'"
+                    'Expected ")"'
                 ))
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            "Invalid or unexpected token"
+            'Invalid or unexpected token'
         ))
 
+    def var_expr(self):
+        res = ParseResult()
+        result = res.register(self.atom())
+        if res.error: return res
+        if self.current_tok.type == TT_IDENTIFIER:
+            var_name_tok = self.current_tok
+            res.register(self.advance())
+            if self.current_tok.type != TT_EQ:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    'Expected "="'
+                ))
+            res.register(self.advance())
+            value = res.register(self.expr())
+            if res.error: return res
+            return res.success(VarAssignNode(result, var_name_tok, value))
+        else:
+            return res.success(result)
+  
     def term(self):
-        return self.bin_op(self.atom, (TT_MUL, TT_DIV))
+        return self.bin_op(self.var_expr, (TT_MUL, TT_DIV))
 
     def expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -358,20 +422,84 @@ class Parser:
 #######################################
 # VALUES
 #######################################
-class Value: 
+class Value:
     def __init__(self):
         self.set_pos()
         self.set_context()
+        self.set_type()
 
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
         self.pos_end = pos_end
         return self
-    
+
     def set_context(self, context=None):
         self.context = context
         return self
-    
+
+    def set_type(self, type=None):
+        self.type = type
+        return self
+
+    def added_to(self, other):
+        return None, self.illegal_operation(other)
+
+    def subbed_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def multed_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def dived_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def powed_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_eq(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_ne(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_lt(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_gt(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_lte(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_gte(self, other):
+        return None, self.illegal_operation(other)
+
+    def anded_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def ored_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def notted(self):
+        return None, self.illegal_operation(self)
+
+    def execute(self, args):
+        return RTResult().failure(self.illegal_operation())
+
+    def copy(self):
+        raise Exception('No copy method defined')
+
+    def is_true(self):
+        return False
+
+    def illegal_operation(self, other=None):
+        if not other: other = self
+        return RTError(
+            self.pos_start, other.pos_end,
+            'Illegal operation',
+            self.context
+        )
+
 class Number(Value):
     def __init__(self, value):
         super().__init__()
@@ -389,15 +517,15 @@ class Number(Value):
 
     def added_to(self, other):
         if isinstance(other, Number):
-            return Number(self.value + other.value).set_context(self.context), None
+            return Number(self.value + other.value).set_context(self.context).set_type(self.type), None
 
     def subbed_by(self, other):
         if isinstance(other, Number):
-            return Number(self.value - other.value).set_context(self.context), None
+            return Number(self.value - other.value).set_context(self.context).set_type(self.type), None
 
     def multed_by(self, other):
         if isinstance(other, Number):
-            return Number(self.value * other.value).set_context(self.context), None
+            return Number(self.value * other.value).set_context(self.context).set_type(self.type), None
 
     def dived_by(self, other):
         if isinstance(other, Number):
@@ -409,18 +537,23 @@ class Number(Value):
                 )
 
             if isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
-                return Number(self.value // other.value), None
+                return Number(self.value // other.value).set_context(self.context).set_type(self.type), None
         
 
-            return Number(self.value / other.value).set_context(self.context), None
+            return Number(self.value / other.value).set_context(self.context).set_type(self.type), None
 
     def negated(self):
-        return Number(-self.value).set_context(self.context)
+        return Number(-self.value).set_context(self.context).set_type(self.type)
 
     def __repr__(self):
         return f'{self.value}'
 
-        
+class Type(Value):
+    def __init__(self, predicate):
+        super().__init__()
+        self.predicate = predicate
+
+
 #######################################
 # RUNTIME RESULT
 #######################################
@@ -452,6 +585,43 @@ class Context:
         self.parent_entry_pos = parent_entry_pos
 
 
+
+#######################################
+# SYMBOL TABLE
+#######################################
+
+class SymbolTable:
+    def __init__(self, parent=None):
+        self.symbols = {}
+        self.parent = parent
+
+    def get(self, name):
+        value = self.symbols.get(name, None)
+        if value == None and self.parent:
+            return self.parent.get(name)
+        return value
+
+    def set(self, name, value):
+        self.symbols[name] = value
+
+    def remove(self, name):
+        del self.symbols[name]
+        
+#######################################
+# TYPES
+#######################################
+type_int = Type(lambda val: isinstance(val, Number) and isinstance(val.value, np.int32))
+type_long = Type(lambda val: isinstance(val, Number) and isinstance(val.value, np.int64))
+type_float = Type(lambda val: isinstance(val, Number) and isinstance(val.value, np.float32))
+type_double = Type(lambda val: isinstance(val, Number) and isinstance(val.value, float))
+type_type = Type(lambda val: isinstance(val, Type))
+NUMERIC_TYPES = {
+    'int32': type_int,
+    'int64': type_long,
+    'float32': type_float, 
+    'float': type_double
+}
+
 #######################################
 # INTERPRETER
 #######################################
@@ -466,9 +636,12 @@ class Interpreter:
 
     def visit_NumberNode(self, node, context):
         # print('Found number node!')
-        return RTResult().success(
-            Number(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
-        )
+        res = RTResult()
+        num = Number(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+        num_type = NUMERIC_TYPES[type(num.value).__name__]
+        num.set_type(type)
+
+        return res.success(num)
     
     def visit_BinOpNode(self, node, context):
         # print('Found bin op node!')  
@@ -491,13 +664,12 @@ class Interpreter:
             result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right) 
-
+        
         if error: 
             return res.failure(error)
         else:
             return res.success(result.set_pos(node.pos_start, node.pos_end))
                       
-
     def visit_UnaryOpNode(self, node, context):
         # print('Found un op node!')
         res = RTResult()
@@ -512,9 +684,6 @@ class Interpreter:
             return res.failure(error)
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))          
-
-
-        
 
     
 #######################################
