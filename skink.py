@@ -6,6 +6,7 @@
 #######################################
 import numpy as np
 import string
+import uuid
 
 #######################################
 # CONSTANTS
@@ -17,6 +18,7 @@ I32_MIN_VALUE = -2147483648
 I32_MAX_VALUE = 2147483647
 I64_MIN_VALUE = -9223372036854775808
 I64_MAX_VALUE = 9223372036854775807
+DEFAULT_MAX_DEPTH = 6
 
 #######################################
 # UTILITY FUNCTIONS
@@ -130,10 +132,9 @@ class Token:
 
 				if pos_end:
 					self.pos_end = pos_end
-		
-		def __repr__(self):
-				if self.value: return f'{self.type}:{self.value}'
-				return f'{self.type}'
+                    
+                
+
 
 
 #######################################
@@ -422,12 +423,26 @@ class Parser:
 #######################################
 # VALUES
 #######################################
-class Value:
-    def __init__(self):
+class SkinkObject:
+    def __init__(self, parent=None):
         self.set_pos()
         self.set_context()
-        self.set_type()
+        self.slots = {}
+        self.parent = parent
+        self.uuid = uuid.uuid4()
+        
+    def get(self, name):
+        value = self.slots.get(name, None)
+        if value == None and self.parent:
+            return self.parent.get(name)
+        return value
 
+    def set(self, name, value):
+        self.slots[name] = value
+
+    def remove(self, name):
+        del self.slots[name]
+        
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
         self.pos_end = pos_end
@@ -435,10 +450,6 @@ class Value:
 
     def set_context(self, context=None):
         self.context = context
-        return self
-
-    def set_type(self, type=None):
-        self.type = type
         return self
 
     def added_to(self, other):
@@ -487,7 +498,15 @@ class Value:
         return RTResult().failure(self.illegal_operation())
 
     def copy(self):
-        raise Exception('No copy method defined')
+        copy = SkinkObject()
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+
+        copy.slots = self.slots
+        copy.parent = self.parent
+
+        return copy
+
 
     def is_true(self):
         return False
@@ -499,10 +518,27 @@ class Value:
             'Illegal operation',
             self.context
         )
+    
+    		
+    def __repr__(self, depthDecr=DEFAULT_MAX_DEPTH):
+        result = '{'
+        for key in self.slots:
+            value = self.slots[key]
+            result = f'{result}{key} => {value}, '
 
-class Number(Value):
-    def __init__(self, value):
-        super().__init__()
+        if 0 != len(list(self.slots.keys())):
+            result = result[0:-2]
+        
+        result += '}'
+
+        return result
+        
+    
+
+class SkinkNumber(SkinkObject):
+    def __init__(self, value, parent=None):
+        if parent == None: parent = number_type
+        super().__init__(parent)
         self.value = value
 
     def set_pos(self, pos_start=None, pos_end=None):
@@ -516,19 +552,25 @@ class Number(Value):
     
 
     def added_to(self, other):
-        if isinstance(other, Number):
-            return Number(self.value + other.value).set_context(self.context).set_type(self.type), None
+        if isinstance(other, SkinkNumber):
+            return SkinkNumber(self.value + other.value).set_context(self.context), None
+        else:
+            return None, self.illegal_operation(other)
 
     def subbed_by(self, other):
-        if isinstance(other, Number):
-            return Number(self.value - other.value).set_context(self.context).set_type(self.type), None
+        if isinstance(other, SkinkNumber):
+            return SkinkNumber(self.value - other.value).set_context(self.context), None
+        else:
+            return None, self.illegal_operation(other)
 
     def multed_by(self, other):
-        if isinstance(other, Number):
-            return Number(self.value * other.value).set_context(self.context).set_type(self.type), None
-
+        if isinstance(other, SkinkNumber):
+            return SkinkNumber(self.value * other.value).set_context(self.context), None
+        else:
+            return None, self.illegal_operation(other)
+            
     def dived_by(self, other):
-        if isinstance(other, Number):
+        if isinstance(other, SkinkNumber):
             if repr(other.value) == '0':
                 return None, RTError(
                     self.pos_start, self.pos_end,
@@ -537,16 +579,18 @@ class Number(Value):
                 )
 
             if isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
-                return Number(self.value // other.value).set_context(self.context).set_type(self.type), None
+                return SkinkNumber(self.value // other.value).set_context(self.context), None
         
 
-            return Number(self.value / other.value).set_context(self.context).set_type(self.type), None
-
+            return SkinkNumber(self.value / other.value).set_context(self.context), None
+        else:
+            return None, self.illegal_operation(other)
+            
     def negated(self):
-        return Number(-self.value).set_context(self.context).set_type(self.type)
+        return SkinkNumber(-self.value).set_context(self.context), None
 
     def copy(self):
-        copy = Number(self.value)
+        copy = SkinkNumber(self.value)
         copy.set_pos(self.pos_start, self.pos_end)
         copy.set_context(self.context)
         return copy
@@ -554,10 +598,21 @@ class Number(Value):
     def __repr__(self):
         return f'{self.value}'
 
-class Type(Value):
-    def __init__(self, predicate):
-        super().__init__()
-        self.predicate = predicate
+class SkinkInt(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(np.int32(value), int_type)
+        
+class SkinkLong(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(np.int64(value), long_type)
+
+class SkinkFloat(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(np.float32(value), float_type)
+
+class SkinkDouble(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(float(value), double_type)
 
 
 #######################################
@@ -612,21 +667,17 @@ class SymbolTable:
 
     def remove(self, name):
         del self.symbols[name]
-        
+
 #######################################
-# TYPES
+# BUILT-IN TYPES
 #######################################
-type_int = Type(lambda val: isinstance(val, Number) and isinstance(val.value, np.int32))
-type_long = Type(lambda val: isinstance(val, Number) and isinstance(val.value, np.int64))
-type_float = Type(lambda val: isinstance(val, Number) and isinstance(val.value, np.float32))
-type_double = Type(lambda val: isinstance(val, Number) and isinstance(val.value, float))
-type_type = Type(lambda val: isinstance(val, Type))
-NUMERIC_TYPES = {
-    'int32': type_int,
-    'int64': type_long,
-    'float32': type_float, 
-    'float': type_double
-}
+object_type = SkinkObject()
+number_type = SkinkObject(object_type)
+int_type = SkinkObject(number_type)
+long_type = SkinkObject(number_type)
+float_type = SkinkObject(number_type)
+double_type = SkinkObject(number_type)
+# class_type = SkinkObject(object_type)
 
 #######################################
 # INTERPRETER
@@ -643,11 +694,23 @@ class Interpreter:
     def visit_NumberNode(self, node, context):
         # print('Found number node!')
         res = RTResult()
-        num = Number(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
-        num_type = NUMERIC_TYPES[type(num.value).__name__]
-        num.set_type(type)
-
-        return res.success(num)
+        if node.tok.type == TT_INT:
+            return res.success(
+                SkinkInt(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        elif node.tok.type == TT_LONG:
+            return res.success(
+                SkinkLong(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        elif node.tok.type == TT_FLOAT:
+            return res.success(
+                SkinkFloat(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        else:
+            return res.success(
+                SkinkDouble(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+    
     
     def visit_VarAccessNode(self, node, context):
         res = RTResult()
@@ -657,7 +720,7 @@ class Interpreter:
         if not value:
             return res.failure(RTError(
                 node.pos_start, node.pos_end,
-                f"'{var_name}' is not defined",
+                f'"{var_name}" is not defined',
                 context
             ))
 
@@ -711,7 +774,11 @@ class Interpreter:
 # RUN
 #######################################
 global_symbol_table = SymbolTable()
-global_symbol_table.set("zero", Number(0))
+global_symbol_table.set('zero', SkinkInt(0)) # DUMMY
+global_symbol_table.set('Int', int_type)
+global_symbol_table.set('Long', long_type)
+global_symbol_table.set('Float', float_type)
+global_symbol_table.set('Double', double_type)
 
 def run_text(fn, text):
     # Generate tokens
