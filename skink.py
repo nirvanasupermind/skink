@@ -23,7 +23,16 @@ DEFAULT_MAX_DEPTH = 6
 #######################################
 # UTILITY FUNCTIONS
 #######################################
+def get_parent(a):
+    return (a.parent or a) if hasattr(a, 'parent') else a
 
+def instanceof(a, b):
+    # print(get_parent(a).__dict__)
+    # print(b.__dict__)
+    x = get_parent(a)
+    y = b
+
+    return x.slots == y.slots and x.parent == y.parent and x.name == y.name
 
 #######################################
 # ERRORS
@@ -427,9 +436,10 @@ class SkinkObject:
     def __init__(self, parent=None):
         self.set_pos()
         self.set_context()
+        self.set_name()
         self.slots = {}
         self.parent = parent
-        self.uuid = uuid.uuid4()
+        # self.uuid = uuid.uuid4()
         
     def get(self, name):
         value = self.slots.get(name, None)
@@ -451,6 +461,11 @@ class SkinkObject:
     def set_context(self, context=None):
         self.context = context
         return self
+
+    def set_name(self, name='<anonymous>'):
+        self.name = name
+        return self
+
 
     def added_to(self, other):
         return None, self.illegal_operation(other)
@@ -501,6 +516,8 @@ class SkinkObject:
         copy = SkinkObject()
         copy.set_pos(self.pos_start, self.pos_end)
         copy.set_context(self.context)
+        copy.set_name(self.name)
+
 
         copy.slots = self.slots
         copy.parent = self.parent
@@ -671,12 +688,12 @@ class SymbolTable:
 #######################################
 # BUILT-IN TYPES
 #######################################
-object_type = SkinkObject()
-number_type = SkinkObject(object_type)
-int_type = SkinkObject(number_type)
-long_type = SkinkObject(number_type)
-float_type = SkinkObject(number_type)
-double_type = SkinkObject(number_type)
+object_type = SkinkObject().set_name('Object')
+number_type = SkinkObject(object_type).set_name('Number')
+int_type = SkinkObject(number_type).set_name('Int')
+long_type = SkinkObject(number_type).set_name('Long')
+float_type = SkinkObject(number_type).set_name('Float')
+double_type = SkinkObject(number_type).set_name('Double')
 # class_type = SkinkObject(object_type)
 
 #######################################
@@ -727,6 +744,37 @@ class Interpreter:
         value = value.copy().set_pos(node.pos_start, node.pos_end)
         return res.success(value)
 
+    def visit_VarAssignNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+        old_value = context.symbol_table.symbols.get(var_name, None)
+        if old_value != None:  
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'"{var_name}" is already defined',
+                context
+            ))
+
+        var_type = res.register(self.visit(node.type_node, context))
+        if res.error: return res
+
+        value = res.register(self.visit(node.value_node, context))
+        if res.error: return res
+
+        # print(value.parent == var_type)
+
+        if not instanceof(value, var_type):
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'Cannot convert type "{var_type.name}" to "{get_parent(value).name}"',
+                context
+            ))
+        
+        # value.set_name(var_name)
+        context.symbol_table.set(var_name, value)
+        return res.success(value)
+        
+
     def visit_BinOpNode(self, node, context):
         # print('Found bin op node!')  
         res = RTResult()
@@ -769,12 +817,13 @@ class Interpreter:
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))          
 
-    
+
 #######################################
 # RUN
 #######################################
 global_symbol_table = SymbolTable()
 global_symbol_table.set('zero', SkinkInt(0)) # DUMMY
+global_symbol_table.set('Object', object_type)
 global_symbol_table.set('Int', int_type)
 global_symbol_table.set('Long', long_type)
 global_symbol_table.set('Float', float_type)
