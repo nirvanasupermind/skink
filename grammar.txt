@@ -1,12 +1,5 @@
-expr: term ((PLUS|MINUS) term)*
-    : var-expr
-
-var-expr: expr IDENTIFIER EQ expr
-
-type: IDENTIFIER
-
-term: factor ((MUL|DIV) factor)*
-
-atom: INT|FLOAT|IDENTIFIER
-	: LPAREN expr RPAREN
-    : (PLUS|MINUS) atom
+expr = term, {(PLUS | MINUS), term};
+term = factor, {(MUL | DIV), term};
+factor = power | ((PLUS | MINUS), factor);
+power = atom, { POW, factor };
+atom = INT | FLOAT | (LPAREN, expr, RPAREN);

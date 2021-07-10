@@ -4,25 +4,35 @@
 #######################################
 # IMPORTS
 #######################################
-from old.skink import VarAccessNode
 import numpy as np
 import string
+import uuid
 
 #######################################
 # CONSTANTS
 #######################################
 DIGITS = '0123456789'
-LETTERS = string.ascii_letters + '$_'
+LETTERS = string.ascii_letters + '_'
 LETTERS_DIGITS = LETTERS + DIGITS
 I32_MIN_VALUE = -2147483648
 I32_MAX_VALUE = 2147483647
 I64_MIN_VALUE = -9223372036854775808
 I64_MAX_VALUE = 9223372036854775807
+DEFAULT_MAX_DEPTH = 6
 
 #######################################
 # UTILITY FUNCTIONS
 #######################################
+def get_parent(a):
+    return (a.parent or a) if hasattr(a, 'parent') else a
 
+def instanceof(a, b):
+    # print(get_parent(a).__dict__)
+    # print(b.__dict__)
+    x = get_parent(a)
+    y = b
+
+    return x.members == y.members and x.parent == y.parent and x.name == y.name
 
 #######################################
 # ERRORS
@@ -109,35 +119,32 @@ TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
 TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
-# TT_POW      = 'POW'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_EQ  = 'EQ'
+TT_IDENTIFIER  = 'IDENTIFIER'
 TT_KEYWORD  = 'KEYWORD'
-TT_IDENTIFIER = 'IDENTIFIER'
-TT_EOF      = 'EOF'
-KEYWORDS = []
+TT_EOF = 'EOF'
+KEYWORDS = [
+    
+]
 
 class Token:
-    def __init__(self, type_, value=None, pos_start=None, pos_end=None):
-        self.type = type_
-        self.value = value
+		def __init__(self, type_, value=None, pos_start=None, pos_end=None):
+				self.type = type_
+				self.value = value
 
-        if pos_start:
-            self.pos_start = pos_start.copy()
-            self.pos_end = pos_start.copy()
-            self.pos_end.advance()
+				if pos_start:
+					self.pos_start = pos_start.copy()
+					self.pos_end = pos_start.copy()
+					self.pos_end.advance()
 
-        if pos_end:
-            self.pos_end = pos_end
+				if pos_end:
+					self.pos_end = pos_end
+                    
+                
 
-    def __repr__(self):
-        if self.value: return f'{self.type}:{self.value}'
-        return f'{self.type}'
-    
-    def errorText(self):
-        # print(self.pos_start.idx)
-        # print(self.pos_end.idx)        
-        return self.pos_start.ftxt[self.pos_start.idx-1:self.pos_end.idx-1]
+
 
 #######################################
 # LEXER
@@ -180,6 +187,9 @@ class Lexer:
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '=':
+                tokens.append(Token(TT_EQ, pos_start=self.pos))
                 self.advance()
             else:
                 # return some error
@@ -224,7 +234,7 @@ class Lexer:
         else: # int
             clipped_num = np.clip(int(num_str), I32_MIN_VALUE, I32_MAX_VALUE)
             return Token(TT_INT, np.int32(clipped_num), pos_start=pos_start, pos_end=self.pos )
-    
+
     def make_identifier(self):
         id_str = ''
         pos_start = self.pos.copy()
@@ -246,9 +256,26 @@ class NumberNode:
         self.tok = tok
         self.pos_start = tok.pos_start
         self.pos_end = tok.pos_end
-    
+
     def __repr__(self):
         return f'{self.tok}'
+
+class VarAccessNode:
+	def __init__(self, var_name_tok):
+		self.var_name_tok = var_name_tok
+
+		self.pos_start = self.var_name_tok.pos_start
+		self.pos_end = self.var_name_tok.pos_end
+
+class VarAssignNode:
+    def __init__(self, type_node, var_name_tok, value_node):
+        self.type_node = type_node
+        self.var_name_tok = var_name_tok
+        self.value_node = value_node
+
+        self.pos_start = self.type_node.pos_start
+        self.pos_end = self.value_node.pos_end
+
 
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
@@ -301,13 +328,14 @@ class ParseResult:
 #######################################
 # PARSER
 #######################################
+
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.tok_idx = -1
         self.advance()
 
-    def advance(self, ):
+    def advance(self):
         self.tok_idx += 1
         if self.tok_idx < len(self.tokens):
             self.current_tok = self.tokens[self.tok_idx]
@@ -316,10 +344,9 @@ class Parser:
     def parse(self):
         res = self.expr()
         if not res.error and self.current_tok.type != TT_EOF:
-            self.advance()
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'Unexpected token "{self.current_tok.errorText()}"'
+                'Invalid or unexpected token'
             ))
         return res
 
@@ -331,15 +358,15 @@ class Parser:
 
         if tok.type in (TT_PLUS, TT_MINUS):
             res.register(self.advance())
-            atom = res.register(self.atom())
+            factor = res.register(self.atom())
             if res.error: return res
-            return res.success(UnaryOpNode(tok, atom))
-        
+            return res.success(UnaryOpNode(tok, factor))
+
         elif tok.type in (TT_INT, TT_LONG, TT_FLOAT, TT_DOUBLE):
             res.register(self.advance())
             return res.success(NumberNode(tok))
 
-        elif tok.type == TT_IDENTIFIER:
+        elif tok.type in (TT_IDENTIFIER):
             res.register(self.advance())
             return res.success(VarAccessNode(tok))
 
@@ -358,11 +385,30 @@ class Parser:
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            f'Unexpected token "{tok.errorText()}"'
+            'Invalid or unexpected token'
         ))
 
+    def var_expr(self):
+        res = ParseResult()
+        result = res.register(self.atom())
+        if res.error: return res
+        if self.current_tok.type == TT_IDENTIFIER:
+            var_name_tok = self.current_tok
+            res.register(self.advance())
+            if self.current_tok.type != TT_EQ:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    'Expected "="'
+                ))
+            res.register(self.advance())
+            value = res.register(self.expr())
+            if res.error: return res
+            return res.success(VarAssignNode(result, var_name_tok, value))
+        else:
+            return res.success(result)
+  
     def term(self):
-        return self.bin_op(self.atom, (TT_MUL, TT_DIV))
+        return self.bin_op(self.var_expr, (TT_MUL, TT_DIV))
 
     def expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -383,15 +429,30 @@ class Parser:
 
         return res.success(left)
 
-
 #######################################
 # VALUES
 #######################################
-class Value:
-    def __init__(self):
+class SkinkObject:
+    def __init__(self, parent=None):
         self.set_pos()
         self.set_context()
+        self.set_name()
+        self.members = {}
+        self.parent = parent
+        self.uuid = uuid.uuid4()
+        
+    def get(self, name):
+        value = self.members.get(name, None)
+        if value == None and self.parent:
+            return self.parent.get(name)
+        return value
 
+    def set(self, name, value):
+        self.members[name] = value
+
+    def remove(self, name):
+        del self.members[name]
+        
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
         self.pos_end = pos_end
@@ -400,6 +461,11 @@ class Value:
     def set_context(self, context=None):
         self.context = context
         return self
+
+    def set_name(self, name='<anonymous>'):
+        self.name = name
+        return self
+
 
     def added_to(self, other):
         return None, self.illegal_operation(other)
@@ -447,7 +513,17 @@ class Value:
         return RTResult().failure(self.illegal_operation())
 
     def copy(self):
-        raise Exception('No copy method defined')
+        copy = SkinkObject()
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+        copy.set_name(self.name)
+
+
+        copy.members = self.members
+        copy.parent = self.parent
+
+        return copy
+
 
     def is_true(self):
         return False
@@ -459,115 +535,106 @@ class Value:
             'Illegal operation',
             self.context
         )
+    
+    def hashCode(self):
+        return hash(self.uuid)
 
-class Number(Value):
-    def __init__(self, value):
-        super().__init__()
+    		
+    def __repr__(self, depthDecr=DEFAULT_MAX_DEPTH):
+        result = '{'
+        for key in self.members:
+            value = self.members[key]
+            result = f'{result}{key}={value}, '
+
+        if 0 != len(list(self.members.keys())):
+            result = result[0:-2]
+        
+        result += '}'
+
+        return result
+        
+    
+
+class SkinkNumber(SkinkObject):
+    def __init__(self, value, parent=None):
+        if parent == None: parent = number_type
+        super().__init__(parent)
         self.value = value
 
+    def set_pos(self, pos_start=None, pos_end=None):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+        return self
+    
+    def set_context(self, context=None):
+        self.context = context
+        return self
+    
+
     def added_to(self, other):
-        if isinstance(other, Number):
-            return Number(self.value + other.value).set_context(self.context), None
+        if isinstance(other, SkinkNumber):
+            return SkinkNumber(self.value + other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, self.illegal_operation(other)
 
     def subbed_by(self, other):
-        if isinstance(other, Number):
-            return Number(self.value - other.value).set_context(self.context), None
+        if isinstance(other, SkinkNumber):
+            return SkinkNumber(self.value - other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, self.illegal_operation(other)
 
     def multed_by(self, other):
-        if isinstance(other, Number):
-            return Number(self.value * other.value).set_context(self.context), None
+        if isinstance(other, SkinkNumber):
+            return SkinkNumber(self.value * other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
-
+            return None, self.illegal_operation(other)
+            
     def dived_by(self, other):
-        if isinstance(other, Number):
-            if other.value == 0:
+        if isinstance(other, SkinkNumber):
+            if repr(other.value) == '0':
                 return None, RTError(
-                    other.pos_start, other.pos_end,
-                    'Division by zero',
+                    self.pos_start, self.pos_end,
+                    'attempt to divide by zero',
                     self.context
                 )
 
             if isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
-                return Number(self.value // other.value).set_context(self.context), None
-            return Number(self.value / other.value).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+                return SkinkNumber(self.value // other.value).set_context(self.context), None
+        
 
-    def powed_by(self, other):
-        if isinstance(other, Number):
-            return Number(np.power(self.value, other.value)).set_context(self.context), None
+            return SkinkNumber(self.value / other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
-
-    def get_comparison_eq(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value == other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def get_comparison_ne(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value != other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def get_comparison_lt(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value < other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def get_comparison_gt(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value > other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def get_comparison_lte(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value <= other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def get_comparison_gte(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value >= other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def anded_by(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value and other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def ored_by(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value or other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def notted(self):
-        return Number(1 if self.value == 0 else 0).set_context(self.context), None
+            return None, self.illegal_operation(other)
+            
+    def negated(self):
+        return SkinkNumber(-self.value).set_context(self.context), None
 
     def copy(self):
-        copy = Number(self.value)
+        copy = SkinkNumber(self.value)
         copy.set_pos(self.pos_start, self.pos_end)
         copy.set_context(self.context)
         return copy
 
-    def is_true(self):
-        return self.value != 0
-
     def __repr__(self):
-        return str(self.value)
+        return f'{self.value}'
 
+class SkinkInt(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(np.int32(value), int_type)
         
+class SkinkLong(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(np.int64(value), long_type)
+
+class SkinkFloat(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(np.float32(value), float_type)
+
+class SkinkDouble(SkinkNumber):
+    def __init__(self, value):
+        super().__init__(float(value), double_type)
+
+
 #######################################
 # RUNTIME RESULT
 #######################################
@@ -597,7 +664,40 @@ class Context:
         self.display_name = display_name
         self.parent = parent
         self.parent_entry_pos = parent_entry_pos
+        self.symbol_table = None
 
+
+#######################################
+# SYMBOL TABLE
+#######################################
+
+class SymbolTable:
+    def __init__(self, parent=None):
+        self.symbols = {}
+        self.parent = parent
+
+    def get(self, name):
+        value = self.symbols.get(name, None)
+        if value == None and self.parent:
+            return self.parent.get(name)
+        return value
+
+    def set(self, name, value):
+        self.symbols[name] = value
+
+    def remove(self, name):
+        del self.symbols[name]
+
+#######################################
+# BUILT-IN TYPES
+#######################################
+object_type = SkinkObject().set_name('Object')
+number_type = SkinkObject(object_type).set_name('Number')
+int_type = SkinkObject(number_type).set_name('Int')
+long_type = SkinkObject(number_type).set_name('Long')
+float_type = SkinkObject(number_type).set_name('Float')
+double_type = SkinkObject(number_type).set_name('Double')
+# class_type = SkinkObject(object_type)
 
 #######################################
 # INTERPRETER
@@ -613,10 +713,71 @@ class Interpreter:
 
     def visit_NumberNode(self, node, context):
         # print('Found number node!')
-        return RTResult().success(
-            Number(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
-        )
+        res = RTResult()
+        if node.tok.type == TT_INT:
+            return res.success(
+                SkinkInt(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        elif node.tok.type == TT_LONG:
+            return res.success(
+                SkinkLong(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        elif node.tok.type == TT_FLOAT:
+            return res.success(
+                SkinkFloat(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        else:
+            return res.success(
+                SkinkDouble(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
     
+    
+    def visit_VarAccessNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+        value = context.symbol_table.get(var_name)
+
+        if not value:
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'"{var_name}" is not defined',
+                context
+            ))
+
+        value = value.copy().set_pos(node.pos_start, node.pos_end)
+        return res.success(value)
+
+    def visit_VarAssignNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+        old_value = context.symbol_table.symbols.get(var_name, None)
+        if old_value != None:  
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'"{var_name}" is already defined',
+                context
+            ))
+
+        var_type = res.register(self.visit(node.type_node, context))
+        if res.error: return res
+
+        value = res.register(self.visit(node.value_node, context))
+        if res.error: return res
+
+        # print(value.parent == var_type)
+
+        if not instanceof(value, var_type):
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'Cannot convert type "{var_type.name}" to "{get_parent(value).name}"',
+                context
+            ))
+        
+        # value.set_name(var_name)
+        context.symbol_table.set(var_name, value)
+        return res.success(value)
+        
+
     def visit_BinOpNode(self, node, context):
         # print('Found bin op node!')  
         res = RTResult()
@@ -638,15 +799,12 @@ class Interpreter:
             result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right) 
-        # elif node.op_tok.type == TT_POW:
-        #     result, error = left.powed_by(right) 
         
         if error: 
             return res.failure(error)
         else:
             return res.success(result.set_pos(node.pos_start, node.pos_end))
                       
-
     def visit_UnaryOpNode(self, node, context):
         # print('Found un op node!')
         res = RTResult()
@@ -661,26 +819,35 @@ class Interpreter:
             return res.failure(error)
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))          
-    
+
+
 #######################################
 # RUN
 #######################################
+global_symbol_table = SymbolTable()
+global_symbol_table.set('zero', SkinkInt(0)) # DUMMY
+global_symbol_table.set('Object', object_type)
+global_symbol_table.set('Int', int_type)
+global_symbol_table.set('Long', long_type)
+global_symbol_table.set('Float', float_type)
+global_symbol_table.set('Double', double_type)
+
 def run_text(fn, text):
-	# Generate tokens
-	lexer = Lexer(fn, text)
-	tokens, error = lexer.make_tokens()
-	if error: return None, error
-	
-	# Generate AST
-	parser = Parser(tokens)
-	ast = parser.parse()
-	if ast.error: return None, ast.error
+    # Generate tokens
+    lexer = Lexer(fn, text)
+    tokens, error = lexer.make_tokens()
+    if error: return None, error
 
-	# Run program
-	interpreter = Interpreter()
-	context = Context('<program>')
-	result = interpreter.visit(ast.node, context)
+    # Generate AST
+    parser = Parser(tokens)
+    ast = parser.parse()
+    if ast.error: return None, ast.error
 
-	return result.value, result.error
+    # Run program
+    interpreter = Interpreter()
+    context = Context('<program>')
+    context.symbol_table = global_symbol_table
 
-	
+    result = interpreter.visit(ast.node, context)
+
+    return result.value, result.error

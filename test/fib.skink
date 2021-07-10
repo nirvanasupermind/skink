@@ -8,4 +8,3 @@ int fib(int n) {
 
 println(fib(6) == 13); 
 println(fib(7) == 21); 
-
