@@ -1,4 +1,4 @@
-int fib(int n) {
+Int fib(Int n) {
     if(n <= 1) { 
         return 1;
     } else {
