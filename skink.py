@@ -4,9 +4,10 @@
 #######################################
 # IMPORTS
 #######################################
-from old.skink import VarAccessNode
 import numpy as np
 import string
+import uuid
+import math
 
 #######################################
 # CONSTANTS
@@ -22,7 +23,8 @@ I64_MAX_VALUE = 9223372036854775807
 #######################################
 # UTILITY FUNCTIONS
 #######################################
-
+def instanceof(a, b):
+    return a.parent.uuid != b.uuid
 
 #######################################
 # ERRORS
@@ -250,6 +252,21 @@ class NumberNode:
     def __repr__(self):
         return f'{self.tok}'
 
+class VarAccessNode:
+	def __init__(self, var_name_tok):
+		self.var_name_tok = var_name_tok
+
+		self.pos_start = self.var_name_tok.pos_start
+		self.pos_end = self.var_name_tok.pos_end
+
+class VarAssignNode:
+	def __init__(self, var_name_tok, value_node):
+		self.var_name_tok = var_name_tok
+		self.value_node = value_node
+
+		self.pos_start = self.var_name_tok.pos_start
+		self.pos_end = self.value_node.pos_end
+
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
         self.left_node = left_node
@@ -387,10 +404,66 @@ class Parser:
 #######################################
 # VALUES
 #######################################
-class Value:
-    def __init__(self):
+class Object:
+    def __init__(self, parent=None):
         self.set_pos()
         self.set_context()
+        self.set_name()
+
+        self.members = {}
+        self.types = {}
+        self.parent = parent
+        self.uuid = uuid.uuid4()
+    
+    def get(self, name):
+        repr_name = repr(name)
+        value = self.members.get(repr_name, None)
+        if value == None and self.parent:
+            return self.parent.get(repr_name)
+        elif value == None:
+            return None, RTError(
+                self.pos_start, self.pos_end,
+                f'{self.parent.name} object has no attribute "{name}"',
+                self.context
+            )
+        else:
+            return value, None
+
+    def set(self, name, value):
+        repr_name = repr(name)
+        if hasattr(self.members, repr_name):
+            oldValue = self.get(repr_name)
+            if not instanceof(value, oldValue.parent): 
+                return None, RTError(
+                    value.pos_start, value.pos_end,
+                    f'Cannot convert type {self.types[repr_name].name} to {oldValue.parent.name}',
+                    self.context
+                )
+            
+            self.members[name] = value
+            self.types[name] = value.parent
+            return value, None
+        else:
+            return None, RTError(
+                value.pos_start, value.pos_end,
+                f'"{name}" is not defined',
+                self.context
+            )
+
+    def define(self, type_, name, value):
+        repr_name = repr(name)
+        if hasattr(self.members, repr_name):
+            return None, RTError(
+                value.pos_start, value.pos_end,
+                f'"{name}" is already defined'
+            )
+        else:
+            self.members[repr_name] = value
+            self.types[repr_name] = type_
+            return value, None
+
+    def remove(self, name):
+        del self.members[name]
 
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
@@ -400,6 +473,11 @@ class Value:
     def set_context(self, context=None):
         self.context = context
         return self
+
+    def set_name(self, name='<anonymous>'):
+        self.name = name
+        return self
+
 
     def added_to(self, other):
         return None, self.illegal_operation(other)
@@ -459,8 +537,11 @@ class Value:
             'Illegal operation',
             self.context
         )
+    
+    def __repr__(self):
+        return '[object]'
 
-class Number(Value):
+class Number(Object):
     def __init__(self, value):
         super().__init__()
         self.value = value
@@ -469,88 +550,94 @@ class Number(Value):
         if isinstance(other, Number):
             return Number(self.value + other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def subbed_by(self, other):
         if isinstance(other, Number):
             return Number(self.value - other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def multed_by(self, other):
         if isinstance(other, Number):
             return Number(self.value * other.value).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def dived_by(self, other):
         if isinstance(other, Number):
-            if other.value == 0:
+            if repr(other.value) == '0':
                 return None, RTError(
                     other.pos_start, other.pos_end,
-                    'Division by zero',
+                    'attempt to divide by zero',
                     self.context
                 )
 
             if isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
                 return Number(self.value // other.value).set_context(self.context), None
-            return Number(self.value / other.value).set_context(self.context), None
+            try: 
+                return Number(self.value / other.value).set_context(self.context), None
+            except ZeroDivisionError:
+                return Number(math.inf).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def powed_by(self, other):
         if isinstance(other, Number):
             return Number(np.power(self.value, other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
+
+    def negated(self):
+        return Number(-self.value).set_context(self.context), None
 
     def get_comparison_eq(self, other):
         if isinstance(other, Number):
             return Number(int(self.value == other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def get_comparison_ne(self, other):
         if isinstance(other, Number):
             return Number(int(self.value != other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def get_comparison_lt(self, other):
         if isinstance(other, Number):
             return Number(int(self.value < other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def get_comparison_gt(self, other):
         if isinstance(other, Number):
             return Number(int(self.value > other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def get_comparison_lte(self, other):
         if isinstance(other, Number):
             return Number(int(self.value <= other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def get_comparison_gte(self, other):
         if isinstance(other, Number):
             return Number(int(self.value >= other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def anded_by(self, other):
         if isinstance(other, Number):
             return Number(int(self.value and other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def ored_by(self, other):
         if isinstance(other, Number):
             return Number(int(self.value or other.value)).set_context(self.context), None
         else:
-            return None, Value.illegal_operation(self, other)
+            return None, Object.illegal_operation(self, other)
 
     def notted(self):
         return Number(1 if self.value == 0 else 0).set_context(self.context), None
@@ -682,3 +769,6 @@ def run_text(fn, text):
 	result = interpreter.visit(ast.node, context)
 
 	return result.value, result.error
+
+myObject = Object()
+print(myObject.get('test'))

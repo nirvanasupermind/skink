@@ -4,6 +4,7 @@ try:
 except:
     pass #readline not available
 
+print('Type "exit" to exit.')
 while True:
     text = input('> ')
 
