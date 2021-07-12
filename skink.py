@@ -855,6 +855,8 @@ global_symbol_table = SymbolTable()
 global_symbol_table.define(type_type, 'type', type_type)
 global_symbol_table.define(type_type, 'int', int_type)
 global_symbol_table.define(type_type, 'long', long_type)
+global_symbol_table.define(type_type, 'float', float_type)
+global_symbol_table.define(type_type, 'double', double_type)
 
 def run_text(fn, text):
     # Generate tokens
