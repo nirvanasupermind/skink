@@ -24,7 +24,7 @@ I64_MAX_VALUE = 9223372036854775807
 # UTILITY FUNCTIONS
 #######################################
 def instanceof(a, b):
-    return a.parent.uuid != b.uuid
+    return a.type.uuid == b.uuid
 
 #######################################
 # ERRORS
@@ -57,12 +57,13 @@ class RTError(LangError):
         self.context = context
 
     def as_string(self):
-        result  = self.generate_traceback()
+        result = self.generate_traceback()
         result += f'{self.error_name}: {self.details}'
         # result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end)
         return result
 
     def generate_traceback(self):
+        if not self.context: return ''
         result = ''
         pos = self.pos_start
         ctx = self.context
@@ -111,9 +112,9 @@ TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
 TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
-# TT_POW      = 'POW'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_EQ       = 'EQ'
 TT_KEYWORD  = 'KEYWORD'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_EOF      = 'EOF'
@@ -182,6 +183,9 @@ class Lexer:
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '=':
+                tokens.append(Token(TT_EQ, pos_start=self.pos))
                 self.advance()
             else:
                 # return some error
@@ -259,13 +263,22 @@ class VarAccessNode:
 		self.pos_start = self.var_name_tok.pos_start
 		self.pos_end = self.var_name_tok.pos_end
 
-class VarAssignNode:
-	def __init__(self, var_name_tok, value_node):
-		self.var_name_tok = var_name_tok
-		self.value_node = value_node
+class VarDefineNode:
+    def __init__(self, type_node, var_name_tok, value_node):
+        self.type_node = type_node
+        self.var_name_tok = var_name_tok
+        self.value_node = value_node
 
-		self.pos_start = self.var_name_tok.pos_start
-		self.pos_end = self.value_node.pos_end
+        self.pos_start = self.type_node.pos_start
+        self.pos_end = self.value_node.pos_end
+
+class VarSetNode:
+    def __init__(self, var_name_tok, value_node):
+        self.var_name_tok = var_name_tok
+        self.value_node = value_node
+
+        self.pos_start = self.var_name_tok.pos_start
+        self.pos_end = self.value_node.pos_end
 
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
@@ -382,7 +395,29 @@ class Parser:
         return self.bin_op(self.atom, (TT_MUL, TT_DIV))
 
     def expr(self):
-        return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
+        res = ParseResult()
+        result = res.register(self.bin_op(self.term, (TT_PLUS, TT_MINUS)))
+        if res.error: return res
+        # self.advance()
+        # print(self.current_tok.type)
+        if self.current_tok.type == TT_IDENTIFIER:
+            var_name_tok = self.current_tok
+            self.advance()
+            if self.current_tok.type != TT_EQ:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    'Expected "="'
+                ))
+            else:
+                self.advance()
+                value = res.register(self.expr())
+                if res.error: return res
+                return res.success(VarDefineNode(result, var_name_tok, value))
+        else:
+            return res.success(result)
+
+            
+        
 
     ###################################
 
@@ -404,66 +439,12 @@ class Parser:
 #######################################
 # VALUES
 #######################################
-class Object:
-    def __init__(self, parent=None):
+class Value:
+    def __init__(self):
         self.set_pos()
         self.set_context()
-        self.set_name()
-
-        self.members = {}
-        self.types = {}
-        self.parent = parent
+        self.set_type()
         self.uuid = uuid.uuid4()
-    
-    def get(self, name):
-        repr_name = repr(name)
-        value = self.members.get(repr_name, None)
-        if value == None and self.parent:
-            return self.parent.get(repr_name)
-        elif value == None:
-            return None, RTError(
-                self.pos_start, self.pos_end,
-                f'{self.parent.name} object has no attribute "{name}"',
-                self.context
-            )
-        else:
-            return value, None
-
-    def set(self, name, value):
-        repr_name = repr(name)
-        if hasattr(self.members, repr_name):
-            oldValue = self.get(repr_name)
-            if not instanceof(value, oldValue.parent): 
-                return None, RTError(
-                    value.pos_start, value.pos_end,
-                    f'Cannot convert type {self.types[repr_name].name} to {oldValue.parent.name}',
-                    self.context
-                )
-            
-            self.members[name] = value
-            self.types[name] = value.parent
-            return value, None
-        else:
-            return None, RTError(
-                value.pos_start, value.pos_end,
-                f'"{name}" is not defined',
-                self.context
-            )
-
-    def define(self, type_, name, value):
-        repr_name = repr(name)
-        if hasattr(self.members, repr_name):
-            return None, RTError(
-                value.pos_start, value.pos_end,
-                f'"{name}" is already defined'
-            )
-        else:
-            self.members[repr_name] = value
-            self.types[repr_name] = type_
-            return value, None
-
-    def remove(self, name):
-        del self.members[name]
 
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
@@ -474,10 +455,10 @@ class Object:
         self.context = context
         return self
 
-    def set_name(self, name='<anonymous>'):
-        self.name = name
+    def set_type(self, type_=None):
+        if type_: type_.members.add(self)
+        self.type = type_
         return self
-
 
     def added_to(self, other):
         return None, self.illegal_operation(other)
@@ -532,112 +513,120 @@ class Object:
 
     def illegal_operation(self, other=None):
         if not other: other = self
+        # print(self.pos_start)
         return RTError(
             self.pos_start, other.pos_end,
             'Illegal operation',
             self.context
         )
-    
-    def __repr__(self):
-        return '[object]'
 
-class Number(Object):
+class Number(Value):
     def __init__(self, value):
         super().__init__()
         self.value = value
+        if isinstance(self.value, np.int32):
+            # int_type.members.add(self)
+            self.set_type(int_type)
+        elif isinstance(self.value, np.int64):
+            # long_type.members.add(self)
+            self.set_type(long_type)
+        elif isinstance(self.value, np.float32):
+            # float_type.members.add(self)
+            self.set_type(float_type)
+        elif isinstance(self.value, float):
+            # double_type.members.add(self)
+            self.set_type(double_type)
 
     def added_to(self, other):
         if isinstance(other, Number):
             return Number(self.value + other.value).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def subbed_by(self, other):
         if isinstance(other, Number):
             return Number(self.value - other.value).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def multed_by(self, other):
         if isinstance(other, Number):
             return Number(self.value * other.value).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def dived_by(self, other):
         if isinstance(other, Number):
             if repr(other.value) == '0':
                 return None, RTError(
                     other.pos_start, other.pos_end,
-                    'attempt to divide by zero',
+                    'Attempt to divide by zero',
                     self.context
                 )
+            elif repr(other.value) == '0.0':
+                return Number(math.inf).set_context(self.context), None
+
 
             if isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
                 return Number(self.value // other.value).set_context(self.context), None
-            try: 
-                return Number(self.value / other.value).set_context(self.context), None
-            except ZeroDivisionError:
-                return Number(math.inf).set_context(self.context), None
+            
+            return Number(self.value / other.value).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def powed_by(self, other):
         if isinstance(other, Number):
             return Number(np.power(self.value, other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
-
-    def negated(self):
-        return Number(-self.value).set_context(self.context), None
+            return None, Value.illegal_operation(self, other)
 
     def get_comparison_eq(self, other):
         if isinstance(other, Number):
             return Number(int(self.value == other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def get_comparison_ne(self, other):
         if isinstance(other, Number):
             return Number(int(self.value != other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def get_comparison_lt(self, other):
         if isinstance(other, Number):
             return Number(int(self.value < other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def get_comparison_gt(self, other):
         if isinstance(other, Number):
             return Number(int(self.value > other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def get_comparison_lte(self, other):
         if isinstance(other, Number):
             return Number(int(self.value <= other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def get_comparison_gte(self, other):
         if isinstance(other, Number):
             return Number(int(self.value >= other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def anded_by(self, other):
         if isinstance(other, Number):
             return Number(int(self.value and other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def ored_by(self, other):
         if isinstance(other, Number):
             return Number(int(self.value or other.value)).set_context(self.context), None
         else:
-            return None, Object.illegal_operation(self, other)
+            return None, Value.illegal_operation(self, other)
 
     def notted(self):
         return Number(1 if self.value == 0 else 0).set_context(self.context), None
@@ -654,7 +643,16 @@ class Number(Object):
     def __repr__(self):
         return str(self.value)
 
-        
+class Type(Value):
+    def __init__(self, name='<anonymous>', add_to_type_type=True):
+        super().__init__()
+        self.name = name
+        self.members = set()
+        if add_to_type_type: self.set_type(type_type)
+    
+    def __repr__(self):
+        return f'<type "{self.name}">'
+
 #######################################
 # RUNTIME RESULT
 #######################################
@@ -680,11 +678,78 @@ class RTResult:
 #######################################
 
 class Context:
-    def __init__(self, display_name, parent=None, parent_entry_pos=None):
+    def __init__(self, display_name, parent=None, parent_entry_pos=None, symbol_table=None):
         self.display_name = display_name
         self.parent = parent
         self.parent_entry_pos = parent_entry_pos
+        self.symbol_table = symbol_table
+    
 
+#######################################
+# SYMBOL TABLE
+#######################################
+
+class SymbolTable:
+    def __init__(self, parent=None):
+        self.parent = parent
+        self.symbols = {}
+        self.types = {}
+    
+    def get(self, name, context):
+        key = str(name)
+        value = self.symbols.get(key, None)
+        if value == None and self.parent:
+            return self.parent.get(name)
+        else:
+            return value
+
+    def define(self, type_, name, value, context=None):
+        key = str(name)
+        if key in self.symbols:
+            return None, RTError(
+                value.pos_start, value.pos_end,
+                f'"{key}" is already defined',
+                context
+            )
+        else:
+            if instanceof(value, type_):
+                self.symbols[key] = value
+                return value, None   
+            else:
+                return None, RTError(
+                    value.pos_start, value.pos_end,
+                    f'"{type_.name}" cannot be converted to "{value.type.name}"',
+                    context
+                )
+
+    def set(self, name, value, context=None):
+        key = str(name)
+        if key in self.symbols:
+            old_value = self.get(key, context) 
+            if instanceof(value, old_value.type):
+                self.symbols[key] = value
+                return value, None   
+            else:
+                return None, RTError(
+                    value.pos_start, value.pos_end,
+                    f'"{old_value.type.name}" cannot be converted to "{value.type.name}"',
+                    context
+                )
+        else:
+            self.symbols[key] = value
+            return value, None
+
+
+#######################################
+# TYPES
+#######################################
+type_type = Type('type', False)
+type_type.set_type(type_type)
+
+int_type = Type('int')
+long_type = Type('long')
+float_type = Type('float')
+double_type = Type('double')
 
 #######################################
 # INTERPRETER
@@ -698,12 +763,44 @@ class Interpreter:
     def no_visit_method(self, node, context):
         raise Exception(f'No visit_{type(node).__name__} method defined')
 
+    #######################################
+
     def visit_NumberNode(self, node, context):
         # print('Found number node!')
         return RTResult().success(
             Number(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
         )
-    
+
+    def visit_VarAccessNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+
+        value = context.symbol_table.get(var_name, context)
+        if value == None:
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'"{var_name}" is not defined',
+                context
+            ))
+
+        return res.success(value.set_pos(node.pos_start, node.pos_end).set_context(context))
+
+
+    def visit_VarDefineNode(self, node, context):
+        res = RTResult()
+        type_ = res.register(self.visit(node.type_node, context))
+        if res.error: return res
+
+        var_name = node.var_name_tok.value
+
+        value = res.register(self.visit(node.value_node, context))
+        if res.error: return res
+        
+        result, error = context.symbol_table.define(type_, var_name, value, context)
+        if error: return res.failure(error)
+
+        return res.success(result)
+
     def visit_BinOpNode(self, node, context):
         # print('Found bin op node!')  
         res = RTResult()
@@ -730,7 +827,7 @@ class Interpreter:
         
         if error: 
             return res.failure(error)
-        else:
+        else:           
             return res.success(result.set_pos(node.pos_start, node.pos_end))
                       
 
@@ -748,27 +845,34 @@ class Interpreter:
             return res.failure(error)
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))          
+
     
+
 #######################################
 # RUN
 #######################################
+global_symbol_table = SymbolTable()
+global_symbol_table.define(type_type, 'type', type_type)
+global_symbol_table.define(type_type, 'int', int_type)
+global_symbol_table.define(type_type, 'long', long_type)
+
 def run_text(fn, text):
-	# Generate tokens
-	lexer = Lexer(fn, text)
-	tokens, error = lexer.make_tokens()
-	if error: return None, error
-	
-	# Generate AST
-	parser = Parser(tokens)
-	ast = parser.parse()
-	if ast.error: return None, ast.error
+    # Generate tokens
+    lexer = Lexer(fn, text)
+    tokens, error = lexer.make_tokens()
+    if error: return None, error
 
-	# Run program
-	interpreter = Interpreter()
-	context = Context('<program>')
-	result = interpreter.visit(ast.node, context)
+    # Generate AST
+    parser = Parser(tokens)
+    ast = parser.parse()
+    if ast.error: return None, ast.error
 
-	return result.value, result.error
+    # Run program
+    interpreter = Interpreter()
 
-myObject = Object()
-print(myObject.get('test'))
+    context = Context('<program>')
+    context.symbol_table = global_symbol_table
+
+    result = interpreter.visit(ast.node, context)
+
+    return result.value, result.error
