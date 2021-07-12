@@ -502,6 +502,9 @@ class Value:
     def notted(self):
         return None, self.illegal_operation(self)
 
+    def negated(self):
+        return None, self.illegal_operation(self)
+
     def execute(self, args):
         return RTResult().failure(self.illegal_operation())
 
@@ -574,62 +577,65 @@ class Number(Value):
         else:
             return None, Value.illegal_operation(self, other)
 
-    def powed_by(self, other):
-        if isinstance(other, Number):
-            return Number(np.power(self.value, other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def powed_by(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(np.power(self.value, other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def get_comparison_eq(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value == other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def get_comparison_eq(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value == other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def get_comparison_ne(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value != other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def get_comparison_ne(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value != other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def get_comparison_lt(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value < other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def get_comparison_lt(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value < other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def get_comparison_gt(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value > other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def get_comparison_gt(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value > other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def get_comparison_lte(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value <= other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def get_comparison_lte(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value <= other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def get_comparison_gte(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value >= other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def get_comparison_gte(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value >= other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def anded_by(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value and other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def anded_by(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value and other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def ored_by(self, other):
-        if isinstance(other, Number):
-            return Number(int(self.value or other.value)).set_context(self.context), None
-        else:
-            return None, Value.illegal_operation(self, other)
+    # def ored_by(self, other):
+    #     if isinstance(other, Number):
+    #         return Number(int(self.value or other.value)).set_context(self.context), None
+    #     else:
+    #         return None, Value.illegal_operation(self, other)
 
-    def notted(self):
-        return Number(1 if self.value == 0 else 0).set_context(self.context), None
+    # def notted(self):
+    #     return Number(1 if self.value == 0 else 0).set_context(self.context), None
+
+    def negated(self):
+        return Number(-self.value).set_context(self.context), None
 
     def copy(self):
         copy = Number(self.value)
@@ -718,7 +724,7 @@ class SymbolTable:
             else:
                 return None, RTError(
                     value.pos_start, value.pos_end,
-                    f'"{type_.name}" cannot be converted to "{value.type.name}"',
+                    f'"{value.type.name}" cannot be converted to "{type_.name}"',
                     context
                 )
 
@@ -732,7 +738,7 @@ class SymbolTable:
             else:
                 return None, RTError(
                     value.pos_start, value.pos_end,
-                    f'"{old_value.type.name}" cannot be converted to "{value.type.name}"',
+                    f'"{value.type.name}" cannot be converted to "{old_value.type.name}"',
                     context
                 )
         else:
