@@ -112,9 +112,21 @@ TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
 TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
+TT_EQ       = 'EQ'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
-TT_EQ       = 'EQ'
+TT_EE       = 'EE'
+TT_NE       = 'NE'
+TT_LT       = 'LT'
+TT_GT       = 'GT'
+TT_LTE      = 'LTE'
+TT_GTE      = 'GTE'
+TT_AND      = 'AND'
+TT_OR       = 'OR'
+TT_NOT      = 'NOT'
+TT_BAND     = 'BAND'
+TT_BOR      = 'BOR'
+TT_BNOT     = 'BNOT'
 TT_NEWLINE  = 'NEWLINE'
 TT_KEYWORD  = 'KEYWORD'
 TT_IDENTIFIER = 'IDENTIFIER'
@@ -185,11 +197,23 @@ class Lexer:
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
                 self.advance()
-            elif self.current_char == '=':
-                tokens.append(Token(TT_EQ, pos_start=self.pos))
-                self.advance()
             elif self.current_char in ';\n\r':
                 tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '!':
+                tokens.append(self.make_not_equals())
+            elif self.current_char == '=':
+                tokens.append(self.make_equals())
+            elif self.current_char == '<':
+                tokens.append(self.make_less_than())
+            elif self.current_char == '>':
+                tokens.append(self.make_greater_than())
+            elif self.current_char == '&':
+                tokens.append(self.make_and())
+            elif self.current_char == '|':
+                tokens.append(self.make_or())
+            elif self.current_char == '~':
+                tokens.append(Token(TT_BNOT, pos_start=self.pos))
                 self.advance()
             else:
                 # return some error
@@ -245,6 +269,73 @@ class Lexer:
 
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
         return Token(tok_type, id_str, pos_start, self.pos)
+
+
+    def make_not_equals(self):
+        tok_type = TT_NOT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_NE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_equals(self):
+        tok_type = TT_EQ
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_EE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_less_than(self):
+        tok_type = TT_LT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_LTE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_greater_than(self):
+        tok_type = TT_GT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_GTE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+    
+    def make_and(self):
+        tok_type = TT_BAND
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '&':
+            self.advance()
+            tok_type = TT_AND
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_or(self):
+        tok_type = TT_BOR
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '|':
+            self.advance()
+            tok_type = TT_OR
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
 
 
 
