@@ -131,7 +131,10 @@ TT_NEWLINE  = 'NEWLINE'
 TT_KEYWORD  = 'KEYWORD'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_EOF      = 'EOF'
-KEYWORDS = []
+KEYWORDS = [
+    'true',
+    'false'
+]
 
 class Token:
     def __init__(self, type_, value=None, pos_start=None, pos_end=None):
@@ -146,15 +149,16 @@ class Token:
         if pos_end:
             self.pos_end = pos_end
 
+    def matches(self, type_, value):
+        return self.type == type_ and self.value == value
+
+    def errorText(self): 
+        return self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]
+
     def __repr__(self):
         if self.value: return f'{self.type}:{self.value}'
         return f'{self.type}'
     
-    def errorText(self):
-        # print(self.pos_start.idx)
-        # print(self.pos_end.idx)        
-        return self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]
-
 #######################################
 # LEXER
 #######################################
@@ -351,6 +355,15 @@ class NumberNode:
     def __repr__(self):
         return f'{self.tok}'
 
+class BooleanNode:
+    def __init__(self, tok):
+        self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
+    
+    def __repr__(self):
+        return f'{self.tok}'
+
 
 class StatementsNode:
     def __init__(self, line_nodes, pos_start, pos_end):
@@ -483,7 +496,7 @@ class Parser:
         res = ParseResult()
         tok = self.current_tok
 
-        if tok.type in (TT_PLUS, TT_MINUS):
+        if tok.type in (TT_PLUS, TT_MINUS, TT_NOT, TT_BNOT):
             res.register_advancement()
             self.advance()
             atom = res.register(self.atom())
@@ -494,6 +507,11 @@ class Parser:
             res.register_advancement()
             self.advance()
             return res.success(NumberNode(tok))
+
+        elif tok.matches(TT_KEYWORD, 'true') or tok.matches(TT_KEYWORD, 'false'):
+            res.register_advancement()
+            self.advance()
+            return res.success(BooleanNode(tok))
 
         elif tok.type == TT_IDENTIFIER:
             res.register_advancement()
@@ -524,9 +542,24 @@ class Parser:
     def term(self):
         return self.bin_op(self.atom, (TT_MUL, TT_DIV))
 
+    def arith_expr(self):
+        return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
+
+    def eq_expr(self):
+        return self.bin_op(self.arith_expr, (TT_EQ, TT_NE))
+
+    def band_expr(self):
+        return self.bin_op(self.eq_expr, (TT_BAND,))
+
+    def bor_expr(self):
+        return self.bin_op(self.band_expr, (TT_BOR,))
+
+    def and_expr(self):
+        return self.bin_op(self.bor_expr, (TT_AND,))
+
     def expr(self):
         res = ParseResult()
-        result = res.register(self.bin_op(self.term, (TT_PLUS, TT_MINUS)))
+        result = res.register(self.bin_op(self.and_expr, (TT_OR)))
         if res.error: return res
         
         # while self.current_tok.type == TT_NEWLINE:
@@ -636,9 +669,10 @@ class Object:
         self.set_pos()
         self.set_context()
         self.set_name()
-        self.parent = parent
-        self.symbol_table = SymbolTable(parent.symbol_table if parent else None)
+
+        self.symbol_table = SymbolTable()
         self.uuid = uuid.uuid4()
+        self.set_parent(parent)
 
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
@@ -653,6 +687,11 @@ class Object:
         self.name = name
         return self
 
+    def set_parent(self, parent=None):
+        self.parent = parent
+        self.symbol_table.parent = parent.symbol_table if parent else None
+        return self
+        
 
     # def set_type(self, type_=None):
     #     if type_: type_.members.add(self)
@@ -701,6 +740,15 @@ class Object:
     def notted(self):
         return None, self.illegal_operation(self)
 
+    def banded_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def bored_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def bnotted(self):
+        return None, self.illegal_operation(self)
+
     def negated(self):
         return None, self.illegal_operation(self)
 
@@ -734,16 +782,16 @@ class Number(Object):
         self.value = value
         if isinstance(self.value, np.int32):
             # int_type.members.add(self)
-            self.parent = int_class
+            self.set_parent(int_class)
         elif isinstance(self.value, np.int64):
             # long_type.members.add(self)
-            self.parent = long_class
+            self.set_parent(long_class)
         elif isinstance(self.value, np.float32):
             # float_type.members.add(self)
-            self.parent = float_class
+            self.set_parent(float_class)
         elif isinstance(self.value, float):
             # double_type.members.add(self)
-            self.parent = double_class
+            self.set_parent(double_class)
 
     def added_to(self, other):
         if isinstance(other, Number):
@@ -788,17 +836,57 @@ class Number(Object):
     #     else:
     #         return None, Value.illegal_operation(self, other)
 
-    # def get_comparison_eq(self, other):
-    #     if isinstance(other, Number):
-    #         return Number(int(self.value == other.value)).set_context(self.context), None
-    #     else:
-    #         return None, Value.illegal_operation(self, other)
+    def get_comparison_eq(self, other):
+        if isinstance(other, Number):
+            return Boolean(self.value == other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
 
-    # def get_comparison_ne(self, other):
-    #     if isinstance(other, Number):
-    #         return Number(int(self.value != other.value)).set_context(self.context), None
-    #     else:
-    #         return None, Value.illegal_operation(self, other)
+    def get_comparison_ne(self, other):
+        if isinstance(other, Number):
+            return Boolean(self.value != other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def get_comparison_lt(self, other):
+        if isinstance(other, Number):
+            return Boolean(self.value < other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def get_comparison_gt(self, other):
+        if isinstance(other, Number):
+            return Boolean(self.value > other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def get_comparison_lte(self, other):
+        if isinstance(other, Number):
+            return Boolean(self.value <= other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+    
+    def get_comparison_gte(self, other):
+        if isinstance(other, Number):
+            return Boolean(self.value >= other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def banded_by(self, other):
+        if isinstance(other, Number) and isinstance(self.value, (np.int32, np.int64)) and isinstance(other.value, (np.int32, np.int64)):
+            return Number(self.value & other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def bored_by(self, other):
+        if isinstance(other, Number):
+            return Number(self.value | other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def bnotted(self):
+        return Number(~self.value).set_context(self.context), None
+
 
     # def get_comparison_lt(self, other):
     #     if isinstance(other, Number):
@@ -853,6 +941,31 @@ class Number(Object):
 
     def __repr__(self):
         return str(self.value)
+
+class Boolean(Object):
+    def __init__(self, value):
+        super().__init__(boolean_class)
+        self.value = value
+    
+    def anded_by(self, other):
+        if isinstance(other, Boolean):
+            return Boolean(self.value and other.value), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def ored_by(self, other):
+        if isinstance(other, Boolean):
+            return Boolean(self.value or other.value), None
+        else:
+            return None, Object.illegal_operation(self, other)
+    
+    def notted(self):
+        return Boolean(not self.value), None
+    
+    def __repr__(self):
+        return f'{str(self.value).lower()}'
+
+
 
 # class Type(Value):
 #     def __init__(self, name='<anonymous>', add_to_type_type=True):
@@ -955,12 +1068,13 @@ class SymbolTable:
 # CLASSES
 #######################################
 object_class = Object().set_name('Object')
-object_class.parent = object_class
+object_class.set_parent(object_class)
 
 int_class = Object(object_class).set_name('Int')
 long_class = Object(object_class).set_name('Long')
 float_class = Object(object_class).set_name('Float')
 double_class = Object(object_class).set_name('Double')
+boolean_class = Object(object_class).set_name('Boolean')
 
 #######################################
 # INTERPRETER
@@ -980,6 +1094,13 @@ class Interpreter:
         # print('Found number node!')
         return RTResult().success(
             Number(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+
+
+    def visit_BooleanNode(self, node, context):
+        # print('Found number node!')
+        return RTResult().success(
+            Boolean(node.tok.value == 'true').set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
 
@@ -1017,7 +1138,7 @@ class Interpreter:
 
         var_name = node.var_name_tok.value
 
-        value = res.register(self.visit(node.value_node, context))
+        value = res.register(self.visit(node.value_node, context)).set_name(var_name)
         if res.error: return res
         
         result, error = context.symbol_table.define(type_, var_name, value, context)
@@ -1062,6 +1183,16 @@ class Interpreter:
             result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right) 
+        elif node.op_tok.type == TT_AND:
+            result, error = left.anded_by(right) 
+        elif node.op_tok.type == TT_OR:
+            result, error = left.ored_by(right) 
+        elif node.op_tok.type == TT_BAND:
+            result, error = left.banded_by(right) 
+        elif node.op_tok.type == TT_BOR:
+            result, error = left.bored_by(right) 
+
+
         # elif node.op_tok.type == TT_POW:
         #     result, error = left.powed_by(right) 
         
@@ -1080,13 +1211,15 @@ class Interpreter:
         error = None
         if node.op_tok.type == TT_MINUS:
             number, error = number.negated()
+        elif node.op_tok.type == TT_NOT:
+            number, error = number.notted()
+        elif node.op_tok.type == TT_BNOT:
+            number, error = number.bnotted()
 
         if error:
             return res.failure(error)
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))          
-
-    
 
 #######################################
 # RUN
@@ -1097,6 +1230,7 @@ global_symbol_table.define(object_class, 'Int', int_class)
 global_symbol_table.define(object_class, 'Long', long_class)
 global_symbol_table.define(object_class, 'Float', float_class)
 global_symbol_table.define(object_class, 'Double', double_class)
+global_symbol_table.define(object_class, 'Boolean', boolean_class)
 
 def run_text(fn, text):
     # Generate tokens
