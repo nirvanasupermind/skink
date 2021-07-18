@@ -1,3 +1,8 @@
+# Skink source code
+# Usage permitted under terms of MIT License
+#######################################
+# IMPORTS
+#######################################
 import skink
 try:
     import readline

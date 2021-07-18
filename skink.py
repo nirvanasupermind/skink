@@ -115,6 +115,8 @@ TT_DIV      = 'DIV'
 TT_EQ       = 'EQ'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_LCURLY   = 'LCURLY'
+TT_RCURLY   = 'RCURLY'
 TT_EE       = 'EE'
 TT_NE       = 'NE'
 TT_LT       = 'LT'
@@ -133,7 +135,9 @@ TT_IDENTIFIER = 'IDENTIFIER'
 TT_EOF      = 'EOF'
 KEYWORDS = [
     'true',
-    'false'
+    'false',
+    'if',
+    'else'
 ]
 
 class Token:
@@ -200,6 +204,12 @@ class Lexer:
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '{':
+                tokens.append(Token(TT_LCURLY, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '}':
+                tokens.append(Token(TT_RCURLY, pos_start=self.pos))
                 self.advance()
             elif self.current_char in ';\n\r':
                 tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
@@ -419,6 +429,23 @@ class UnaryOpNode:
     def __repr__(self):
         return f'({self.op_tok}, {self.node})'
 
+class IfNode:
+    def __init__(self, condition, if_case):
+        self.condition = condition
+        self.if_case = if_case
+
+        self.pos_start = self.condition.pos_start
+        self.pos_end = self.if_case.pos_end
+
+class IfElseNode:
+    def __init__(self, condition, if_case, else_case):
+        self.condition = condition
+        self.if_case = if_case
+        self.else_case = else_case
+
+        self.pos_start = self.condition.pos_start
+        self.pos_end = self.else_case.pos_end
+
 #######################################
 # PARSE RESULT
 #######################################
@@ -532,12 +559,17 @@ class Parser:
                     self.current_tok.pos_start, self.current_tok.pos_end,
                     'Expected ")"'
                 ))
-
-        self.reverse()
-        return res.failure(InvalidSyntaxError(
-            self.current_tok.pos_start, self.current_tok.pos_end,
-            f'Unexpected token "{tok.errorText()}"'
-        ))
+        
+        elif tok.matches(TT_KEYWORD, 'if'):
+            if_expr = res.register(self.if_expr())
+            if res.error: return res
+            return res.success(if_expr)
+        else:
+            self.reverse()
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected token "{self.current_tok.errorText()}"'
+            ))
 
     def term(self):
         return self.bin_op(self.atom, (TT_MUL, TT_DIV))
@@ -545,8 +577,11 @@ class Parser:
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
 
+    def comp_expr(self):
+        return self.bin_op(self.arith_expr, (TT_LT, TT_GT, TT_LTE, TT_GTE))
+
     def eq_expr(self):
-        return self.bin_op(self.arith_expr, (TT_EQ, TT_NE))
+        return self.bin_op(self.comp_expr, (TT_EE, TT_NE))
 
     def band_expr(self):
         return self.bin_op(self.eq_expr, (TT_BAND,))
@@ -602,6 +637,81 @@ class Parser:
                 return res.success(VarSetNode(result.var_name_tok, value))
         else:
             return res.success(result)
+
+    def if_expr(self):
+        res = ParseResult()
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_LPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected "("'
+            ))
+        
+        condition = res.register(self.expr())
+        if res.error: return res
+
+        self.reverse()
+        if self.current_tok.type != TT_RPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected ")"'
+            ))
+        
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.type != TT_LCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected "{"'
+            ))
+        
+        res.register_advancement()
+        self.advance()
+
+        statements = res.register(self.statements())
+
+        if res.error: return res
+        if self.current_tok.type != TT_RCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected "}"'
+            ))
+        
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.matches(TT_KEYWORD, 'else'): 
+                res.register_advancement()
+                self.advance()
+                if self.current_tok.type != TT_LCURLY:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        'Expected "{"'
+                    ))
+                
+                res.register_advancement()
+                self.advance()
+
+                else_case = res.register(self.statements())
+
+                if res.error: return res
+                if self.current_tok.type != TT_RCURLY:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        'Expected "}"'
+                    ))
+                
+                res.register_advancement()
+                self.advance()
+                return res.success(IfElseNode(condition, statements, else_case))
+        else: 
+                return res.success(IfNode(condition, statements))            
+
+        
+
+        
+
 
     def statements(self):
             res = ParseResult()
@@ -714,10 +824,10 @@ class Object:
         return None, self.illegal_operation(other)
 
     def get_comparison_eq(self, other):
-        return None, self.illegal_operation(other)
+        return Boolean(self.uuid == other.uuid).set_context(self.context), None
 
     def get_comparison_ne(self, other):
-        return None, self.illegal_operation(other)
+        return Boolean(self.uuid != other.uuid).set_context(self.context), None
 
     def get_comparison_lt(self, other):
         return None, self.illegal_operation(other)
@@ -837,16 +947,10 @@ class Number(Object):
     #         return None, Value.illegal_operation(self, other)
 
     def get_comparison_eq(self, other):
-        if isinstance(other, Number):
-            return Boolean(self.value == other.value).set_context(self.context), None
-        else:
-            return None, Object.illegal_operation(self, other)
+        return Boolean(isinstance(other, Number) and self.value == other.value).set_context(self.context), None
 
     def get_comparison_ne(self, other):
-        if isinstance(other, Number):
-            return Boolean(self.value != other.value).set_context(self.context), None
-        else:
-            return None, Object.illegal_operation(self, other)
+        return Boolean(not (isinstance(other, Number) and self.value == other.value)).set_context(self.context), None
 
     def get_comparison_lt(self, other):
         if isinstance(other, Number):
@@ -946,7 +1050,13 @@ class Boolean(Object):
     def __init__(self, value):
         super().__init__(boolean_class)
         self.value = value
-    
+
+    def get_comparison_eq(self, other):
+        return Boolean(isinstance(other, Boolean) and self.value == other.value).set_context(self.context), None
+
+    def get_comparison_ne(self, other):
+        return Boolean(isinstance(other, Boolean) and self.value != other.value).set_context(self.context), None
+
     def anded_by(self, other):
         if isinstance(other, Boolean):
             return Boolean(self.value and other.value), None
@@ -1183,6 +1293,18 @@ class Interpreter:
             result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right) 
+        elif node.op_tok.type == TT_EE:
+            result, error = left.get_comparison_eq(right) 
+        elif node.op_tok.type == TT_NE:
+            result, error = left.get_comparison_ne(right) 
+        elif node.op_tok.type == TT_LT:
+            result, error = left.get_comparison_lt(right) 
+        elif node.op_tok.type == TT_GT:
+            result, error = left.get_comparison_gt(right)
+        elif node.op_tok.type == TT_LTE:
+            result, error = left.get_comparison_lte(right)  
+        elif node.op_tok.type == TT_GTE:
+            result, error = left.get_comparison_gte(right) 
         elif node.op_tok.type == TT_AND:
             result, error = left.anded_by(right) 
         elif node.op_tok.type == TT_OR:
