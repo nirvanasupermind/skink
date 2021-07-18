@@ -136,6 +136,7 @@ TT_EOF      = 'EOF'
 KEYWORDS = [
     'true',
     'false',
+    'undefined',
     'if',
     'else'
 ]
@@ -374,6 +375,14 @@ class BooleanNode:
     def __repr__(self):
         return f'{self.tok}'
 
+class UndefinedNode:
+    def __init__(self, tok):
+        self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
+    
+    def __repr__(self):
+        return f'{self.tok}'
 
 class StatementsNode:
     def __init__(self, line_nodes, pos_start, pos_end):
@@ -539,6 +548,12 @@ class Parser:
             res.register_advancement()
             self.advance()
             return res.success(BooleanNode(tok))
+
+        elif tok.matches(TT_KEYWORD, 'undefined'):
+            res.register_advancement()
+            self.advance()
+            return res.success(UndefinedNode(tok))
+
 
         elif tok.type == TT_IDENTIFIER:
             res.register_advancement()
@@ -1075,7 +1090,18 @@ class Boolean(Object):
     def __repr__(self):
         return f'{str(self.value).lower()}'
 
+class Undefined(Object):
+    def __init__(self):
+        super().__init__(undefined_class)
+    
+    def get_comparison_eq(self, other):
+        return Boolean(isinstance(other, Undefined)).set_context(self.context), None
 
+    def get_comparison_ne(self, other):
+        return not Boolean(isinstance(other, Undefined)).set_context(self.context), None      
+
+    def __repr__(self):
+        return 'undefined'
 
 # class Type(Value):
 #     def __init__(self, name='<anonymous>', add_to_type_type=True):
@@ -1185,6 +1211,7 @@ long_class = Object(object_class).set_name('Long')
 float_class = Object(object_class).set_name('Float')
 double_class = Object(object_class).set_name('Double')
 boolean_class = Object(object_class).set_name('Boolean')
+undefined_class = Object(object_class).set_name('Undefined')
 
 #######################################
 # INTERPRETER
@@ -1213,6 +1240,12 @@ class Interpreter:
             Boolean(node.tok.value == 'true').set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
+
+    def visit_UndefinedNode(self, node, context):
+        # print('Found number node!')
+        return RTResult().success(
+            Undefined().set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
     def visit_StatementsNode(self, node, context):
         res = RTResult()
@@ -1248,7 +1281,7 @@ class Interpreter:
 
         var_name = node.var_name_tok.value
 
-        value = res.register(self.visit(node.value_node, context)).set_name(var_name)
+        value = res.register(self.visit(node.value_node, context))
         if res.error: return res
         
         result, error = context.symbol_table.define(type_, var_name, value, context)
@@ -1342,7 +1375,54 @@ class Interpreter:
             return res.failure(error)
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))          
+    
+    def visit_IfNode(self, node, context): 
+        res = RTResult()
+        condition = res.register(self.visit(node.condition, context))
+        if res.error: return res
+    
+        if not isinstance(condition, Boolean):
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'"{condition.parent.name}" cannot be converted to "Boolean"',
+                context
+            ))
+        
+        if condition.value:
+            if_case = res.register(self.visit(node.if_case, context))
+            if res.error: return res
 
+            return res.success(if_case)
+        else:
+            return res.success(Undefined().set_context().set_pos(node.pos_start, node.pos_end))
+    
+    def visit_IfElseNode(self, node, context): 
+        res = RTResult()
+        condition = res.register(self.visit(node.condition, context))
+        if res.error: return res
+    
+        if not isinstance(condition, Boolean):
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f'"{condition.parent.name}" cannot be converted to "Boolean"',
+                context
+            ))
+        
+        if condition.value:
+            if_case = res.register(self.visit(node.if_case, context))
+            if res.error: return res
+
+            return res.success(if_case)
+        else:
+            else_case = res.register(self.visit(node.else_case, context))
+            if res.error: return res
+
+            return res.success(else_case)
+
+   
+
+
+        
 #######################################
 # RUN
 #######################################
@@ -1353,6 +1433,7 @@ global_symbol_table.define(object_class, 'Long', long_class)
 global_symbol_table.define(object_class, 'Float', float_class)
 global_symbol_table.define(object_class, 'Double', double_class)
 global_symbol_table.define(object_class, 'Boolean', boolean_class)
+global_symbol_table.define(object_class, 'Undefined', undefined_class)
 
 def run_text(fn, text):
     # Generate tokens
