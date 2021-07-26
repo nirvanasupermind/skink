@@ -5,7 +5,7 @@ Skink has a large standard library which contains several packages.
 
 # 2. Lexical Structure
 This chapter specifies the lexical structure of Skink. -->
-
+<!-- 
 # 1 Introduction
 Skink is a lightweight, statically typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes prototype-based code.
 
@@ -239,4 +239,4 @@ returnType functionName(parameter1, parameter2,...) {
 ## 7.1 Creating Modules
 ## 7.2 Importing Modules
 
-# 8 Standard Modules
+# 8 Standard Modules -->

@@ -1,5 +1,6 @@
 # Skink source code
 # Usage permitted under terms of MIT License
+
 #######################################
 # IMPORTS
 #######################################
@@ -9,14 +10,13 @@ try:
 except:
     pass #readline not available
 
-print('Type "exit" to exit.')
 while True:
     text = input('> ')
-
-    if text == 'exit': break
-
-    result, error = skink.run_text('<stdin>', text)
-    if(error): 
-        print(error.as_string())
+    if text == 'exit': 
+        break
     else:
-        print(result)
+        result, error = skink.runstring('<stdin>', text)
+        if error: 
+            print(error.as_string())
+        else: 
+            print(result)

@@ -1,7 +1,7 @@
 # skink
-**NOTICE**: interpreter is WiP
+**NOTICE**: implementation for this language is WiP
 
-Skink is a small, statically typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes prototype-based code. 
+Skink is a dynamically-typed, interpreted programming language that is  especially suited to numeric computation and scientific computing. It emphasizes purely prototype-based code. 
 
 # Specification
 See [SPEC.md](SPEC.md).

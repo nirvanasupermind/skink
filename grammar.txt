@@ -1,5 +1,0 @@
-expr = term, {(PLUS | MINUS), term};
-term = factor, {(MUL | DIV), term};
-factor = power | ((PLUS | MINUS), factor);
-power = atom, { POW, factor };
-atom = INT | FLOAT | (LPAREN, expr, RPAREN);
