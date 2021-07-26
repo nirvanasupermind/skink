@@ -2,6 +2,7 @@
 # IMPORTS
 #######################################
 import numpy as np 
+import uuid
 
 #######################################
 # CONSTANTS
@@ -143,6 +144,7 @@ class Lexer:
     def make_number(self):
         num_str = ''
         dot_count = 0
+        pos_start = self.pos
 
         while self.current_char != None and self.current_char in DIGITS + '.':
             if self.current_char == '.':
@@ -155,9 +157,9 @@ class Lexer:
 
         if dot_count == 0:
             clipped = np.clip(int(num_str), -(2 ** 63), 2 ** 63 - 1)
-            return Token(TT_INT, np.int64(clipped))
+            return Token(TT_INT, np.int64(clipped), pos_start, self.pos)
         else:
-            return Token(TT_FLOAT, float(num_str))
+            return Token(TT_FLOAT, float(num_str), pos_start, self.pos)
 
 #######################################
 # NODES
@@ -165,6 +167,8 @@ class Lexer:
 class NumberNode:
     def __init__(self, tok):
         self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
     
     def __repr__(self):
         return f'{self.tok}'
@@ -174,6 +178,9 @@ class BinOpNode:
         self.left_node = left_node
         self.op_tok = op_tok
         self.right_node = right_node
+
+        self.pos_start = left_node.pos_start
+        self.pos_end = right_node.pos_end
     
     def __repr__(self):
         return f'({self.left_node}, {self.op_tok}, {self.right_node})'
@@ -182,6 +189,12 @@ class UnaryOpNode:
     def __init__(self, op_tok, node):
         self.op_tok = op_tok
         self.node = node
+
+        self.pos_start = op_tok.pos_start
+        self.pos_end = node.pos_end
+
+
+
 
     def __repr__(self):
         return f'({self.op_tok}, {self.node})'
@@ -290,7 +303,189 @@ class Parser:
             left = BinOpNode(left, op_tok, right)
 
         return res.success(left)
+
+#######################################
+# VALUES
+#######################################
+class Object:
+    def __init__(self, proto=None):
+        self.slots = {}
+        self.proto = proto
+        self.uuid = uuid.uuid4()
+
+        self.set_pos()
+        self.set_context()
+
+    def set_pos(self, pos_start=None, pos_end=None):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+        return self
+
+    def set_context(self, context=None):
+        self.context = context
+        return self
         
+    def get(self, name):
+        value = self.slots.get(name, None)
+        if value == None and self.proto:
+            return self.proto.get(name)
+        return value
+
+    def set(self, name, value):
+        self.slots[name] = value
+
+    def remove(self, name):
+        del self.slots[name]
+
+class Int(Object): 
+    def __init__(self, value):
+        super().__init__(int_object)
+        self.value = np.int64(value)
+    
+    def added_to(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value + other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+                
+    def subbed_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value - other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+
+    def multed_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value * other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+    
+    def dived_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value * other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+
+    def negated(self): 
+        result = -self.value
+        return Int(result)
+
+
+    def __repr__(self):
+        return f'{self.value}'
+        
+    
+class Float(Object): 
+    def __init__(self, value):
+        super().__init__(float_object)
+        self.value = float(value)
+    
+    def added_to(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value + other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+                
+    def subbed_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value - other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+
+    def multed_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value * other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+    
+    def dived_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            result = self.value * other.value
+            if isinstance(result, np.int64):
+                return Int(result)
+            else:
+                return Float(result)
+
+    def negated(self): 
+        result = -self.value
+        return Float(result)
+
+
+    def __repr__(self):
+        return f'{self.value}'
+        
+
+#######################################
+# OBJECTS
+#######################################
+object_object = Object()
+int_object = Object(object_object)
+float_object = Object(object_object)
+
+#######################################
+# INTERPRETER
+#######################################
+class Interpreter:
+    def visit(self, node):
+        method_name = f'visit_{type(node).__name__}'
+        # "visit_BinOpNode"
+        # "visit_NumberNode"
+        method = getattr(self, method_name, self.no_visit_method)
+        return method(node)
+
+    def no_visit_method(self, node):
+        raise Exception(f'No visit_{type(node).__name__} method found')
+
+    def visit_NumberNode(self, node):
+        # print('found number node!')
+        if node.tok.type == TT_INT:
+            return Int(node.tok.value).set_pos(node.pos_start, node.pos_end)
+        else:
+            return Float(node.tok.value).set_pos(node.pos_start, node.pos_end)            
+    
+    def visit_BinOpNode(self, node):
+        # print('found bin op node!')
+        left = self.visit(node.left_node)
+        right = self.visit(node.right_node)
+        result = None
+
+        if node.op_tok.type == TT_PLUS:
+            result = left.added_to(right)
+        elif node.op_tok.type == TT_MINUS:
+            result = left.subbed_by(right)
+        elif node.op_tok.type == TT_MUL:
+            result = left.multed_by(right)
+        elif node.op_tok.type == TT_DIV:
+            result = left.dived_by(right)
+
+        return result.set_pos(node.pos_start, node.pos_end)
+            
+
+    def visit_UnaryOpNode(self, node):
+        # print('found un op node!')
+        number = self.visit(node.node)
+
+        if node.op_tok.type == TT_MINUS:
+            number = number.negated()
+        
+        return number.set_pos(node.pos_start, node.pos_end)
+
+
+
 #######################################
 # RUN
 #######################################
@@ -303,6 +498,10 @@ def runstring(text, fn='<anonymous>'):
     # Generate AST
     parser = Parser(tokens)
     ast = parser.parse()
-    
+    if ast.error: return None, ast.error
 
-    return ast.node, ast.error
+    # Run program
+    interpreter = Interpreter()
+    result = interpreter.visit(ast.node)
+
+    return result, None
