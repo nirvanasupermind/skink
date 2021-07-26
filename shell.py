@@ -15,8 +15,8 @@ while True:
     if text == 'exit': 
         break
     else:
-        result, error = skink.runstring('<stdin>', text)
-        if error: 
+        result, error = skink.runstring(text)
+        if error:
             print(error.as_string())
         else: 
             print(result)
