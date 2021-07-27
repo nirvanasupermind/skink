@@ -99,6 +99,7 @@ TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 
 class Token:
@@ -160,6 +161,9 @@ class Lexer:
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
                 self.advance()
+            elif self.current_char in '\n\r;':
+                tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
+                self.advance()
             else:
                 pos_start = self.pos.copy()
                 char = self.current_char
@@ -201,6 +205,13 @@ class NumberNode:
     def __repr__(self):
         return f'{self.tok}'
 
+class StatementsNode:
+    def __init__(self, element_nodes, pos_start, pos_end):
+        self.element_nodes = element_nodes
+
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
         self.left_node = left_node
@@ -230,26 +241,39 @@ class UnaryOpNode:
 #######################################
 # PARSE RESULT
 #######################################
+
 class ParseResult:
     def __init__(self):
         self.error = None
         self.node = None
+        self.last_registered_advance_count = 0
+        self.advance_count = 0
+        self.to_reverse_count = 0
+
+    def register_advancement(self):
+        self.last_registered_advance_count = 1
+        self.advance_count += 1
 
     def register(self, res):
-        if isinstance(res, ParseResult):
-            if res.error: self.error = res.error
-            return res.node
+        self.last_registered_advance_count = res.advance_count
+        self.advance_count += res.advance_count
+        if res.error: self.error = res.error
+        return res.node
 
-        return res
+    def try_register(self, res):
+        if res.error:
+            self.to_reverse_count = res.advance_count
+            return None
+        return self.register(res)
 
     def success(self, node):
         self.node = node
         return self
 
     def failure(self, error):
-        self.error = error
+        if not self.error or self.last_registered_advance_count == 0:
+            self.error = error
         return self
-
 
 #######################################
 # PARSER
@@ -261,14 +285,23 @@ class Parser:
         self.tok_idx = -1
         self.advance()
 
-    def advance(self, ):
+    def advance(self):
         self.tok_idx += 1
-        if self.tok_idx < len(self.tokens):
-            self.current_tok = self.tokens[self.tok_idx]
+        self.update_current_tok()
         return self.current_tok
 
+    def reverse(self, amount=1):
+        self.tok_idx -= amount
+        self.update_current_tok()
+        return self.current_tok
+
+    def update_current_tok(self):
+        if self.tok_idx >= 0 and self.tok_idx < len(self.tokens):
+            self.current_tok = self.tokens[self.tok_idx]
+
+
     def parse(self):
-        res = self.expr()
+        res = self.statements()
         if not res.error and self.current_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
@@ -283,21 +316,25 @@ class Parser:
         tok = self.current_tok
 
         if tok.type in (TT_PLUS, TT_MINUS):
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             factor = res.register(self.factor())
             if res.error: return res
             return res.success(UnaryOpNode(tok, factor))
         
         elif tok.type in (TT_INT, TT_FLOAT):
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             return res.success(NumberNode(tok))
 
         elif tok.type == TT_LPAREN:
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             expr = res.register(self.expr())
             if res.error: return res
             if self.current_tok.type == TT_RPAREN:
-                res.register(self.advance())
+                res.register_advancement()
+                self.advance()
                 return res.success(expr)
             else:
                 return res.failure(InvalidSyntaxError(
@@ -316,6 +353,48 @@ class Parser:
     def expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
 
+    def statements(self):
+        res = ParseResult()
+        statements = []
+        pos_start = self.current_tok.pos_start.copy()
+
+        while self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+        
+        statement = res.register(self.expr())
+        if res.error: return res
+        
+        statements.append(statement)
+
+        more_statements = True
+        while True:
+            newline_count = 0
+            while self.current_tok.type == TT_NEWLINE:
+                res.register_advancement()
+                self.advance()
+                newline_count += 1
+            
+            if newline_count == 0:
+                more_statements = False
+            
+            if not more_statements: break
+            statement = res.try_register(self.expr())
+            if not statement:
+                self.reverse(res.to_reverse_count)
+                more_statements = False
+                continue
+            else:
+                statements.append(statement)
+
+
+        return res.success(StatementsNode(
+            statements,
+            pos_start,
+            self.current_tok.pos_end.copy()
+        ))
+
+
     ###################################
 
     def bin_op(self, func, ops):
@@ -325,7 +404,8 @@ class Parser:
 
         while self.current_tok.type in ops:
             op_tok = self.current_tok
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             right = res.register(func())
             if res.error: return res
             left = BinOpNode(left, op_tok, right)
@@ -531,7 +611,20 @@ class Interpreter:
         else:
             return res.success(
                 Float(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
-            )            
+            )   
+
+
+    def visit_StatementsNode(self, node, context):
+        res = RTResult() 
+        lines = []
+        for i in range(0, len(node.element_nodes)):
+            line = res.register(self.visit(node.element_nodes[i], context))
+            if res.error: return res
+            lines.append(line)
+        
+        return res.success(lines[-1])
+
+
     
     def visit_BinOpNode(self, node, context):
         # print('found bin op node!')
