@@ -22,8 +22,8 @@ class Error:
         self.details = details
 
     def as_string(self):
-        result  = f'{self.error_name}: {self.details}\n'
-        result += f'\tat {self.pos_start.fn}:{self.pos_start.ln + 1}:{self.pos_start.col + 1}'
+        result  = f'{self.pos_start.fn}:{self.pos_start.ln + 1}:{self.pos_start.col + 1}: '
+        result  += f'{self.error_name}: {self.details}'
         return result
 
 class IllegalCharError(Error):
@@ -33,6 +33,34 @@ class IllegalCharError(Error):
 class InvalidSyntaxError(Error):
     def __init__(self, pos_start, pos_end, details):
         super().__init__(pos_start, pos_end, 'Invalid Syntax', details)
+
+
+class RTError(Error):
+    def __init__(self, pos_start, pos_end, details, context):
+        super().__init__(pos_start, pos_end, 'Runtime Error', details)
+        self.context = context
+
+    def as_string(self):
+        result  = f'{self.pos_start.fn}:{self.pos_start.ln + 1}:{self.pos_start.col + 1}: '
+        result  += f'{self.error_name}: {self.details}\n'
+        result  += 'stack traceback: '
+        result  += self.generate_traceback()
+        return result
+
+    def generate_traceback(self):
+        result = ''
+        pos = self.pos_start
+        ctx = self.context
+
+        while ctx:
+            result = f'{result}\n\t{pos.fn}:{pos.ln + 1}:{pos.col + 1}: in {ctx.display_name}'
+            pos = ctx.parent_entry_pos
+            ctx = ctx.parent
+
+        return result
+
+    
+
 
 #######################################
 # POSITION
@@ -305,12 +333,32 @@ class Parser:
         return res.success(left)
 
 #######################################
+# RUNTIME RESULT
+#######################################
+class RTResult:
+    def __init__(self):
+        self.value = None
+        self.error = None
+    
+    def register(self, res):
+        if res.error: self.error = res.error
+        return res.value
+
+    def success(self, value):
+        self.value = value
+        return self
+    
+    def failure(self, error):
+        self.error = error
+        return self
+
+#######################################
 # VALUES
 #######################################
 class Object:
-    def __init__(self, proto=None):
+    def __init__(self, prototype=None):
         self.slots = {}
-        self.proto = proto
+        self.prototype = prototype
         self.uuid = uuid.uuid4()
 
         self.set_pos()
@@ -327,8 +375,8 @@ class Object:
         
     def get(self, name):
         value = self.slots.get(name, None)
-        if value == None and self.proto:
-            return self.proto.get(name)
+        if value == None and self.prototype:
+            return self.prototype.get(name)
         return value
 
     def set(self, name, value):
@@ -346,37 +394,46 @@ class Int(Object):
         if isinstance(other, (Int, Float)):
             result = self.value + other.value
             if isinstance(result, np.int64):
-                return Int(result)
+                return Int(result).set_context(self.context), None
             else:
-                return Float(result)
+                return Float(result).set_context(self.context), None
                 
     def subbed_by(self, other): 
         if isinstance(other, (Int, Float)):
             result = self.value - other.value
             if isinstance(result, np.int64):
-                return Int(result)
+                return Int(result).set_context(self.context), None
             else:
-                return Float(result)
+                return Float(result).set_context(self.context), None
 
     def multed_by(self, other): 
         if isinstance(other, (Int, Float)):
             result = self.value * other.value
             if isinstance(result, np.int64):
-                return Int(result)
+                return Int(result).set_context(self.context), None
             else:
-                return Float(result)
+                return Float(result).set_context(self.context), None
     
     def dived_by(self, other): 
         if isinstance(other, (Int, Float)):
-            result = self.value * other.value
-            if isinstance(result, np.int64):
-                return Int(result)
+            if repr(other) == '0':
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'attempt to divide by zero',
+                    self.context
+                )
+            elif repr(other) == '0.0':
+                return Float(np.inf).set_context(self.context), None
             else:
-                return Float(result)
+                result = self.value / other.value if isinstance(other.value, float) else self.value // other.value
+                if isinstance(result, np.int64):
+                    return Int(result).set_context(self.context), None
+                else:
+                    return Float(result).set_context(self.context), None
 
     def negated(self): 
         result = -self.value
-        return Int(result)
+        return Int(result).set_context(self.context), None
 
 
     def __repr__(self):
@@ -392,37 +449,40 @@ class Float(Object):
         if isinstance(other, (Int, Float)):
             result = self.value + other.value
             if isinstance(result, np.int64):
-                return Int(result)
+                return Int(result).set_context(self.context), None
             else:
-                return Float(result)
+                return Float(result).set_context(self.context), None
                 
     def subbed_by(self, other): 
         if isinstance(other, (Int, Float)):
             result = self.value - other.value
             if isinstance(result, np.int64):
-                return Int(result)
+                return Int(result).set_context(self.context), None
             else:
-                return Float(result)
+                return Float(result).set_context(self.context), None
 
     def multed_by(self, other): 
         if isinstance(other, (Int, Float)):
             result = self.value * other.value
             if isinstance(result, np.int64):
-                return Int(result)
+                return Int(result).set_context(self.context), None
             else:
-                return Float(result)
+                return Float(result).set_context(self.context), None
     
     def dived_by(self, other): 
         if isinstance(other, (Int, Float)):
-            result = self.value * other.value
-            if isinstance(result, np.int64):
-                return Int(result)
+            if repr(other) in ('0', '0.0'):
+                return Float(np.inf).set_context(self.context), None
             else:
-                return Float(result)
+                result = self.value / other.value
+                if isinstance(result, np.int64):
+                    return Int(result).set_context(self.context), None
+                else:
+                    return Float(result).set_context(self.context), None
 
     def negated(self): 
         result = -self.value
-        return Float(result)
+        return Float(result).set_context(self.context), None
 
 
     def __repr__(self):
@@ -437,52 +497,79 @@ int_object = Object(object_object)
 float_object = Object(object_object)
 
 #######################################
+# CONTEXT
+#######################################
+class Context:
+    def __init__(self, display_name, parent=None, parent_entry_pos=None):
+        self.display_name = display_name
+        self.parent = parent
+        self.parent_entry_pos = parent_entry_pos
+        self.symbol_table = None
+
+
+#######################################
 # INTERPRETER
 #######################################
 class Interpreter:
-    def visit(self, node):
+    def visit(self, node, context):
         method_name = f'visit_{type(node).__name__}'
         # "visit_BinOpNode"
         # "visit_NumberNode"
         method = getattr(self, method_name, self.no_visit_method)
-        return method(node)
+        return method(node, context)
 
-    def no_visit_method(self, node):
+    def no_visit_method(self, node, context):
         raise Exception(f'No visit_{type(node).__name__} method found')
 
-    def visit_NumberNode(self, node):
+    def visit_NumberNode(self, node, context):
         # print('found number node!')
+        res = RTResult()
         if node.tok.type == TT_INT:
-            return Int(node.tok.value).set_pos(node.pos_start, node.pos_end)
+            return res.success(
+                Int(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
         else:
-            return Float(node.tok.value).set_pos(node.pos_start, node.pos_end)            
+            return res.success(
+                Float(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+            )            
     
-    def visit_BinOpNode(self, node):
+    def visit_BinOpNode(self, node, context):
         # print('found bin op node!')
-        left = self.visit(node.left_node)
-        right = self.visit(node.right_node)
+        res = RTResult()
+
+        left = res.register(self.visit(node.left_node, context))
+        right = res.register(self.visit(node.right_node, context))
+        if res.error: return res
+
         result = None
+        error = None
 
         if node.op_tok.type == TT_PLUS:
-            result = left.added_to(right)
+            result, error  = left.added_to(right)
         elif node.op_tok.type == TT_MINUS:
-            result = left.subbed_by(right)
+            result, error = left.subbed_by(right)
         elif node.op_tok.type == TT_MUL:
-            result = left.multed_by(right)
+            result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
-            result = left.dived_by(right)
+            result, error = left.dived_by(right)
 
-        return result.set_pos(node.pos_start, node.pos_end)
+        if error: return res.failure(error)
+        return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
             
 
-    def visit_UnaryOpNode(self, node):
+    def visit_UnaryOpNode(self, node, context):
         # print('found un op node!')
-        number = self.visit(node.node)
+        res = RTResult()
+        number = res.register(self.visit(node.node, context))
+        if res.error: return res
+
+        error = None
 
         if node.op_tok.type == TT_MINUS:
-            number = number.negated()
+            number, error = number.negated()
         
-        return number.set_pos(node.pos_start, node.pos_end)
+        if error: return res.failure(error)
+        return res.success(number.set_pos(node.pos_start, node.pos_end))
 
 
 
@@ -502,6 +589,8 @@ def runstring(text, fn='<anonymous>'):
 
     # Run program
     interpreter = Interpreter()
-    result = interpreter.visit(ast.node)
+    context = Context('<program>')
+    result = interpreter.visit(ast.node, context)
+    if result.error: return None, result.error
 
-    return result, None
+    return result.value, None
