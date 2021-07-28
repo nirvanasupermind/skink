@@ -109,6 +109,8 @@ TT_DIV      = 'DIV'
 TT_EQ       = 'EQ'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_LCURLY   = 'LCURLY'
+TT_RCURLY   = 'RCURLY'
 TT_EE       = 'EE'
 TT_NE       = 'NE'
 TT_LT       = 'LT'
@@ -126,10 +128,12 @@ TT_BNOT     = 'BNOT'
 TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 KEYWORDS = [
-    'false', 
-    'null', 
+    'null',
     'true',
-    'var'
+    'false',
+    'var',
+    'if',
+    'else'
 ]
 
 class Token:
@@ -144,7 +148,6 @@ class Token:
                 self.pos_end.advance(None)
             else:
                 self.pos_end = pos_end
-
 
     def display_text(self):
         if self.type == TT_EOF: return 'end of input'
@@ -200,6 +203,12 @@ class Lexer:
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '{':
+                tokens.append(Token(TT_LCURLY, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '}':
+                tokens.append(Token(TT_RCURLY, pos_start=self.pos))
                 self.advance()
             elif self.current_char == '!':
                 tokens.append(self.make_not_equals())
@@ -413,11 +422,25 @@ class UnaryOpNode:
         self.pos_start = op_tok.pos_start
         self.pos_end = node.pos_end
 
-
-
-
     def __repr__(self):
         return f'({self.op_tok}, {self.node})'
+
+class IfNode:
+    def __init__(self, condition, if_case):
+        self.condition = condition
+        self.if_case = if_case
+
+        self.pos_start = self.condition.pos_start
+        self.pos_end = self.if_case.pos_end
+
+class IfElseNode:
+    def __init__(self, condition, if_case, else_case):
+        self.condition = condition
+        self.if_case = if_case
+        self.else_case = else_case
+
+        self.pos_start = self.condition.pos_start
+        self.pos_end = self.else_case.pos_end
 
 #######################################
 # PARSE RESULT
@@ -582,7 +605,10 @@ class Parser:
             var_declare_expr = res.register(self.var_declare_expr())
             if res.error: return res
             return res.success(var_declare_expr)
-
+        elif self.current_tok.matches(TT_KEYWORD, 'if'):
+            var_declare_expr = res.register(self.if_expr())
+            if res.error: return res
+            return res.success(var_declare_expr)
         return self.assignment_expr()
 
     def var_declare_expr(self):
@@ -615,6 +641,77 @@ class Parser:
 
         return res.success(VarDeclareNode(var_name, expr))
     
+
+    def if_expr(self):
+        res = ParseResult()
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_LPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected "("'
+            ))
+
+        condition = res.register(self.expr())
+        if res.error: return res
+
+        self.reverse()
+        if self.current_tok.type != TT_RPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected ")"'
+            ))
+
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.type != TT_LCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected "{"'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        statements = res.register(self.statements())
+
+        if res.error: return res
+        if self.current_tok.type != TT_RCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                'Expected "}"'
+            ))
+
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.matches(TT_KEYWORD, 'else'): 
+                res.register_advancement()
+                self.advance()
+                if self.current_tok.type != TT_LCURLY:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        'Expected "{"'
+                    ))
+
+                res.register_advancement()
+                self.advance()
+
+                else_case = res.register(self.statements())
+
+                if res.error: return res
+                if self.current_tok.type != TT_RCURLY:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        'Expected "}"'
+                    ))
+
+                res.register_advancement()
+                self.advance()
+                return res.success(IfElseNode(condition, statements, else_case))
+        else: 
+                return res.success(IfNode(condition, statements))            
+
 
     def statements(self):
         res = ParseResult()
@@ -787,6 +884,9 @@ class Object:
     def bnotted(self):
         return None, self.illegal_operation()
 
+    def is_true(self):
+        return True
+
     def illegal_operation(self, other=None):
         if not other: other = self
         return RTError(
@@ -830,6 +930,9 @@ class Null(Object):
     def __init__(self):
         super().__init__(null_object)
     
+    def is_true(self):
+        return False
+        
     def __repr__(self):
         return 'null'
         
@@ -951,6 +1054,9 @@ class Int(Object):
     def bnotted(self):
         return Int(~self.value).set_context(self.context), None
 
+    def is_true(self):
+        return self.value != np.int64(0)
+        
     def __repr__(self):
         return f'{self.value}'
         
@@ -1035,6 +1141,9 @@ class Float(Object):
         else:
             return None, Object.illegal_operation(self, other)
 
+    def is_true(self):
+        return self.value != 0.0
+        
     def __repr__(self):
         return f'{self.value}'
         
@@ -1266,6 +1375,37 @@ class Interpreter:
         
         if error: return res.failure(error)
         return res.success(number.set_pos(node.pos_start, node.pos_end))
+
+
+    def visit_IfNode(self, node, context): 
+        res = RTResult()
+        condition = res.register(self.visit(node.condition, context))
+        if res.error: return res
+
+        if condition.is_true():
+            if_case = res.register(self.visit(node.if_case, context))
+            if res.error: return res
+
+            return res.success(if_case)
+        else:
+            return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
+
+    def visit_IfElseNode(self, node, context): 
+        res = RTResult()
+        condition = res.register(self.visit(node.condition, context))
+        if res.error: return res
+
+        if condition.is_true():
+            if_case = res.register(self.visit(node.if_case, context))
+            if res.error: return res
+
+            return res.success(if_case)
+        else:
+            else_case = res.register(self.visit(node.else_case, context))
+            if res.error: return res
+
+            return res.success(else_case)
+
 
 #######################################
 # RUN
