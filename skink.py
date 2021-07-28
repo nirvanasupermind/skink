@@ -1,6 +1,7 @@
 # Skink source code
 # Usage permitted under terms of MIT License
 
+#
 #######################################
 # IMPORTS
 #######################################
@@ -1147,7 +1148,6 @@ class Float(Object):
     def __repr__(self):
         return f'{self.value}'
         
-
 class Bool(Object):
     def __init__(self, value):
         super().__init__(bool_object)
