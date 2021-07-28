@@ -106,10 +106,25 @@ TT_DIV      = 'DIV'
 TT_EQ       = 'EQ'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
+TT_EE       = 'EE'
+TT_NE       = 'NE'
+TT_LT       = 'LT'
+TT_LTE      = 'LTE'
+TT_GT       = 'GT'
+TT_GTE      = 'GTE'
+TT_AND      = 'AND'
+TT_OR       = 'OR'
+TT_XOR      = 'XOR'
+TT_NOT      = 'NOT'
+TT_BAND     = 'BAND'
+TT_BOR      = 'BOR'
+TT_BXOR     = 'BXOR'
+TT_BNOT     = 'BNOT'
 TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 KEYWORDS = [
-    'var'
+    'var',
+    'null'
 ]
 
 class Token:
@@ -117,13 +132,15 @@ class Token:
         self.type = type_
         self.value = value
 
+
+        if pos_end:
+            self.pos_end = pos_end
+
         if pos_start:
             self.pos_start = pos_start.copy()
             self.pos_end = pos_start.copy()
             self.pos_end.advance(None)
 
-        if pos_end:
-            self.pos_end = pos_end
     def display_text(self):
         if self.type == TT_EOF: return 'end of input'
         return f'token "{self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]}"'
@@ -173,14 +190,28 @@ class Lexer:
             elif self.current_char == '/':
                 tokens.append(Token(TT_DIV, pos_start=self.pos))
                 self.advance()
-            elif self.current_char == '=':
-                tokens.append(Token(TT_EQ, pos_start=self.pos))
-                self.advance()
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos))
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '!':
+                tokens.append(self.make_not_equals())
+            elif self.current_char == '=':
+                tokens.append(self.make_equals())
+            elif self.current_char == '<':
+                tokens.append(self.make_less_than())
+            elif self.current_char == '>':
+                tokens.append(self.make_greater_than())
+            elif self.current_char == '&':
+                tokens.append(self.make_and())
+            elif self.current_char == '|':
+                tokens.append(self.make_or())
+            elif self.current_char == '^':
+                tokens.append(self.make_xor())
+            elif self.current_char == '~':
+                tokens.append(Token(TT_BNOT, pos_start=self.pos))
                 self.advance()
             elif self.current_char in NEWLINES:
                 tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
@@ -225,11 +256,90 @@ class Lexer:
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
         return Token(tok_type, id_str, pos_start, self.pos)
 
+    def make_not_equals(self):
+        tok_type = TT_NOT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_NE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        
+
+    def make_equals(self):
+        tok_type = TT_EQ
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_EE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_less_than(self):
+        tok_type = TT_LT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_LTE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_greater_than(self):
+        tok_type = TT_GT
+        pos_start = self.pos.copy()
+        print(self.current_char)
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_GTE
+
+        print(self.current_char)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_and(self):
+        tok_type = TT_BAND
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '&':
+            self.advance()
+            tok_type = TT_AND
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_or(self):
+        tok_type = TT_BOR
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '|':
+            self.advance()
+            tok_type = TT_OR
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_xor(self):
+        tok_type = TT_BXOR
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '^':
+            self.advance()
+            tok_type = TT_XOR
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
 
 #######################################
 # NODES
 #######################################
-class NumberNode:
+class NullNode:
     def __init__(self, tok):
         self.tok = tok
         self.pos_start = tok.pos_start
@@ -238,6 +348,14 @@ class NumberNode:
     def __repr__(self):
         return f'{self.tok}'
 
+class NumberNode:
+    def __init__(self, tok):
+        self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
+    
+    def __repr__(self):
+        return f'{self.tok}'
 
 class VarAccessNode:
 	def __init__(self, var_name_tok):
@@ -261,6 +379,7 @@ class StatementsNode:
 
         self.pos_start = pos_start
         self.pos_end = pos_end
+
 
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
@@ -377,6 +496,11 @@ class Parser:
             self.advance()
             return res.success(NumberNode(tok))
 
+        elif tok.matches(TT_KEYWORD, 'null'):
+            res.register_advancement()
+            self.advance()
+            return res.success(NullNode(tok))
+
         elif tok.type == TT_IDENTIFIER:
             res.register_advancement()
             self.advance()
@@ -405,12 +529,35 @@ class Parser:
     def term(self):
         return self.bin_op(self.factor, (TT_MUL, TT_DIV))
 
-    def term(self):
-        return self.bin_op(self.factor, (TT_MUL, TT_DIV))
-
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
 
+    def comp_expr(self):
+        return self.bin_op(self.arith_expr, (TT_LT, TT_LTE, TT_GT, TT_GTE))
+    
+    def eq_expr(self):
+        return self.bin_op(self.comp_expr, (TT_EQ, TT_NE))
+    
+    def band_expr(self):
+        return self.bin_op(self.eq_expr, (TT_BAND, ))
+    
+    def bxor_expr(self):
+        return self.bin_op(self.band_expr, (TT_BXOR, ))
+    
+    def bor_expr(self):
+        return self.bin_op(self.bxor_expr, (TT_BOR, ))
+    
+    def and_expr(self):
+        return self.bin_op(self.bor_expr, (TT_AND, ))
+    
+    def xor_expr(self):
+        return self.bin_op(self.and_expr, (TT_XOR, ))
+    
+    def or_expr(self):
+        return self.bin_op(self.xor_expr, (TT_OR, ))
+
+    def assignment_expr(self):
+        return self.bin_op(self.or_expr, (TT_EQ,))
 
     def expr(self):
         res = ParseResult()
@@ -419,7 +566,7 @@ class Parser:
             if res.error: return res
             return res.success(var_declare_expr)
 
-        return self.bin_op(self.arith_expr, (TT_EQ,))
+        return self.assignment_expr()
 
     def var_declare_expr(self):
         res = ParseResult()
@@ -612,6 +759,13 @@ class Object:
         result += f'{key}: {value_str}}}' 
         return result
 
+class Null(Object):
+    def __init__(self):
+        super().__init__(null_object)
+    
+    def __repr__(self):
+        return 'null'
+        
 class Int(Object): 
     def __init__(self, value):
         super().__init__(int_object)
@@ -652,7 +806,7 @@ class Int(Object):
             if repr(other) == '0':
                 return None, RTError(
                     other.pos_start, other.pos_end,
-                    'attempt to divide by zero',
+                    'Integer division by zero',
                     self.context
                 )
             elif repr(other) == '0.0':
@@ -727,6 +881,7 @@ class Float(Object):
 # OBJECTS
 #######################################
 object_object = Object()
+null_object = Object(object_object)
 int_object = Object(object_object)
 float_object = Object(object_object)
 
@@ -760,6 +915,11 @@ class Interpreter:
 
     def no_visit_method(self, node, context):
         raise Exception(f'No visit_{type(node).__name__} method found')
+
+    def visit_NullNode(self, node, context):
+        return RTResult().success(
+            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
     def visit_NumberNode(self, node, context):
         # print('found number node!')
