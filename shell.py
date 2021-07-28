@@ -10,6 +10,7 @@ try:
 except:
     pass #readline not available
 
+
 while True:
     text = input('> ')
     if text == 'exit': 

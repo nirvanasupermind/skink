@@ -1,3 +1,6 @@
+# Skink source code
+# Usage permitted under terms of MIT License
+
 #######################################
 # IMPORTS
 #######################################
@@ -11,8 +14,8 @@ import string
 DIGITS = '0123456789'
 LETTERS = string.ascii_letters + '_'
 LETTERS_DIGITS = LETTERS + DIGITS
-NEWLINES = '\n\r;'
-DEFAULT_MAX_DEPTH = 9
+NEWLINES = '\n\r'
+DEFAULT_MAX_DEPTH = 6
 
 #######################################
 # ERRORS
@@ -123,8 +126,10 @@ TT_BNOT     = 'BNOT'
 TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 KEYWORDS = [
-    'var',
-    'null'
+    'false', 
+    'null', 
+    'true',
+    'var'
 ]
 
 class Token:
@@ -132,14 +137,14 @@ class Token:
         self.type = type_
         self.value = value
 
-
-        if pos_end:
-            self.pos_end = pos_end
-
         if pos_start:
             self.pos_start = pos_start.copy()
-            self.pos_end = pos_start.copy()
-            self.pos_end.advance(None)
+            if not pos_end:
+                self.pos_end = pos_start.copy()
+                self.pos_end.advance(None)
+            else:
+                self.pos_end = pos_end
+
 
     def display_text(self):
         if self.type == TT_EOF: return 'end of input'
@@ -213,7 +218,7 @@ class Lexer:
             elif self.current_char == '~':
                 tokens.append(Token(TT_BNOT, pos_start=self.pos))
                 self.advance()
-            elif self.current_char in NEWLINES:
+            elif self.current_char in NEWLINES + ';':
                 tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
                 self.advance()
             else:
@@ -293,14 +298,12 @@ class Lexer:
     def make_greater_than(self):
         tok_type = TT_GT
         pos_start = self.pos.copy()
-        print(self.current_char)
         self.advance()
 
         if self.current_char == '=':
             self.advance()
             tok_type = TT_GTE
 
-        print(self.current_char)
         return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
 
     def make_and(self):
@@ -349,6 +352,15 @@ class NullNode:
         return f'{self.tok}'
 
 class NumberNode:
+    def __init__(self, tok):
+        self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
+    
+    def __repr__(self):
+        return f'{self.tok}'
+
+class BoolNode:
     def __init__(self, tok):
         self.tok = tok
         self.pos_start = tok.pos_start
@@ -484,22 +496,27 @@ class Parser:
         res = ParseResult()
         tok = self.current_tok
 
-        if tok.type in (TT_PLUS, TT_MINUS):
+        if tok.type in (TT_PLUS, TT_MINUS, TT_NOT, TT_BNOT):
             res.register_advancement()
             self.advance()
             factor = res.register(self.factor())
             if res.error: return res
             return res.success(UnaryOpNode(tok, factor))
         
+        elif tok.matches(TT_KEYWORD, 'null'):
+            res.register_advancement()
+            self.advance()
+            return res.success(NullNode(tok))
+
         elif tok.type in (TT_INT, TT_FLOAT):
             res.register_advancement()
             self.advance()
             return res.success(NumberNode(tok))
 
-        elif tok.matches(TT_KEYWORD, 'null'):
+        elif tok.matches(TT_KEYWORD, 'true') or tok.matches(TT_KEYWORD, 'false'):
             res.register_advancement()
             self.advance()
-            return res.success(NullNode(tok))
+            return res.success(BoolNode(tok))
 
         elif tok.type == TT_IDENTIFIER:
             res.register_advancement()
@@ -536,7 +553,7 @@ class Parser:
         return self.bin_op(self.arith_expr, (TT_LT, TT_LTE, TT_GT, TT_GTE))
     
     def eq_expr(self):
-        return self.bin_op(self.comp_expr, (TT_EQ, TT_NE))
+        return self.bin_op(self.comp_expr, (TT_EE, TT_NE))
     
     def band_expr(self):
         return self.bin_op(self.eq_expr, (TT_BAND, ))
@@ -724,7 +741,52 @@ class Object:
 
     def dived_by(self, other):
         return None, self.illegal_operation(other)
-        
+
+    def negated(self):
+        return None, self.illegal_operation()
+
+    def get_comparison_eq(self, other):
+        return Bool(self.uuid == other.uuid), None
+    
+    def get_comparison_ne(self, other):
+        return Bool(self.uuid != other.uuid), None
+    
+    def get_comparison_lt(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_gt(self, other):
+        return None, self.illegal_operation(other)
+
+    def get_comparison_lte(self, other):
+        return None, self.illegal_operation(other)
+    
+    def get_comparison_gte(self, other):
+        return None, self.illegal_operation(other)
+    
+    def anded_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def ored_by(self, other):
+        return None, self.illegal_operation(other)
+    
+    def xored_by(self, other):
+        return None, self.illegal_operation(other)
+
+    def notted(self):
+        return None, self.illegal_operation()
+    
+    def banded_by(self, other):
+        return None, self.illegal_operation(other)
+    
+    def bored_by(self, other):
+        return None, self.illegal_operation(other)
+    
+    def bxored_by(self, other):
+        return None, self.illegal_operation(other)
+    
+    def bnotted(self):
+        return None, self.illegal_operation()
+
     def illegal_operation(self, other=None):
         if not other: other = self
         return RTError(
@@ -735,19 +797,24 @@ class Object:
     
     def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
         # print(depth_decr)
-        if depth_decr < 0:
-            return '{...}'
-
         keys = list(self.slots.keys())
         values = list(self.slots.values())
 
         if len(keys) == 0: return '{}'
+        if depth_decr < 0:
+            return '{...}'
+
+
         result = '{'
         for i in range(0, len(keys)-1):
             key = keys[i]
             value = values[i]
 
-            value_str = value.__repr__(depth_decr - 1) if type(value) == Object else str(value)
+            use_depth_decr = type(value) in (
+                Object, 
+            ) 
+
+            value_str = value.__repr__(depth_decr - 1) if use_depth_decr else str(value)
 
             result += f'{key}: {value_str}, ' 
         
@@ -824,6 +891,66 @@ class Int(Object):
         result = -self.value
         return Int(result).set_context(self.context), None
 
+    def get_comparison_eq(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value == other.value).set_context(self.context), None
+        else:
+            return Bool(False), None
+
+    def get_comparison_ne(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value != other.value).set_context(self.context), None
+        else:
+            return Bool(True), None
+    
+    def get_comparison_lt(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value < other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+            
+    def get_comparison_gt(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value > other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+            
+    def get_comparison_lte(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value <= other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+            
+    def get_comparison_gte(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value >= other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def banded_by(self, other):
+        if isinstance(other, Int):
+            result = self.value & other.value
+            return Int(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def bored_by(self, other):
+        if isinstance(other, Int):
+            result = self.value | other.value
+            return Int(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def bxored_by(self, other):
+        if isinstance(other, Int):
+            result = self.value ^ other.value
+            return Int(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def bnotted(self):
+        return Int(~self.value).set_context(self.context), None
+
     def __repr__(self):
         return f'{self.value}'
         
@@ -872,11 +999,87 @@ class Float(Object):
         result = -self.value
         return Float(result).set_context(self.context), None
 
+    def get_comparison_eq(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value == other.value).set_context(self.context), None
+        else:
+            return Bool(False), None
+
+    def get_comparison_ne(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value != other.value).set_context(self.context), None
+        else:
+            return Bool(True), None
+    
+    def get_comparison_lt(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value < other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+            
+    def get_comparison_gt(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value > other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+            
+    def get_comparison_lte(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value <= other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+            
+    def get_comparison_gte(self, other):
+        if isinstance(other, (Int, Float)):
+            return Bool(self.value >= other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
 
     def __repr__(self):
         return f'{self.value}'
         
 
+class Bool(Object):
+    def __init__(self, value):
+        super().__init__(bool_object)
+        self.value = value
+
+    def get_comparison_eq(self, other):
+        if isinstance(other, Bool):
+            return Bool(self.value == other.value).set_context(self.context), None
+        else:
+            return Bool(False).set_context(self.context), None
+
+    def get_comparison_ne(self, other):
+        if isinstance(other, Bool):
+            return Bool(self.value != other.value).set_context(self.context), None
+        else:
+            return Bool(True).set_context(self.context), None
+
+    def anded_by(self, other):
+        if isinstance(other, Bool):
+            return Bool(self.value and other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def ored_by(self, other):
+        if isinstance(other, Bool):
+            return Bool(self.value or other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def xored_by(self, other):
+        if isinstance(other, Bool):
+            return Bool(self.value != other.value).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def notted(self):
+        return Bool(not self.value).set_context(self.context), None
+
+    def __repr__(self):
+        return 'true' if self.value else 'false'
+        
 #######################################
 # OBJECTS
 #######################################
@@ -884,6 +1087,7 @@ object_object = Object()
 null_object = Object(object_object)
 int_object = Object(object_object)
 float_object = Object(object_object)
+bool_object = Object(object_object)
 
 #######################################
 # CONTEXT
@@ -932,6 +1136,11 @@ class Interpreter:
             return res.success(
                 Float(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
             )   
+
+    def visit_BoolNode(self, node, context):
+        return RTResult().success(
+            Bool(node.tok.value == 'true').set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
     def visit_VarAccessNode(self, node, context):
         res = RTResult()
@@ -1011,6 +1220,30 @@ class Interpreter:
 
             context.symbol_table.object.set(var_name, value)
             return res.success(value)
+        elif node.op_tok.type == TT_EE:
+            result, error = left.get_comparison_eq(right)
+        elif node.op_tok.type == TT_NE:
+            result, error = left.get_comparison_ne(right)
+        elif node.op_tok.type == TT_LT:
+            result, error = left.get_comparison_lt(right)
+        elif node.op_tok.type == TT_GT:
+            result, error = left.get_comparison_gt(right)
+        elif node.op_tok.type == TT_LTE:
+            result, error = left.get_comparison_lte(right)
+        elif node.op_tok.type == TT_GTE:
+            result, error = left.get_comparison_gte(right)
+        elif node.op_tok.type == TT_AND:
+            result, error = left.anded_by(right)
+        elif node.op_tok.type == TT_OR:
+            result, error = left.ored_by(right)
+        elif node.op_tok.type == TT_XOR:
+            result, error = left.xored_by(right)
+        elif node.op_tok.type == TT_BAND:
+            result, error = left.banded_by(right)
+        elif node.op_tok.type == TT_BOR:
+            result, error = left.bored_by(right)
+        elif node.op_tok.type == TT_BXOR:
+            result, error = left.bxored_by(right)
             
         if error: return res.failure(error)
         return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
@@ -1026,11 +1259,13 @@ class Interpreter:
 
         if node.op_tok.type == TT_MINUS:
             number, error = number.negated()
+        elif node.op_tok.type == TT_NOT:
+            number, error = number.notted()
+        elif node.op_tok.type == TT_BNOT:
+            number, error = number.bnotted()
         
         if error: return res.failure(error)
         return res.success(number.set_pos(node.pos_start, node.pos_end))
-
-
 
 #######################################
 # RUN
@@ -1039,8 +1274,10 @@ global_symbol_table = SymbolTable(Object(object_object))
 global_symbol_table.object.set('global', global_symbol_table.object)
 
 global_symbol_table.object.set('Object', object_object)
+global_symbol_table.object.set('Null', null_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
+global_symbol_table.object.set('Bool', bool_object)
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
