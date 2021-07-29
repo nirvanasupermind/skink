@@ -1728,7 +1728,7 @@ class Interpreter:
         if not value:
             return res.failure(RTError(
                 node.pos_start, node.pos_end,
-                f'"{var_name}" is not defined',
+                f'{var_name} is not defined',
                 context
             ))
         
@@ -1742,7 +1742,7 @@ class Interpreter:
         if old_value:
             return res.failure(RTError(
                 node.pos_start, node.pos_end,
-                f'"{var_name}" is already defined',
+                f'{var_name} is already defined',
                 context
             ))
         
@@ -1768,6 +1768,7 @@ class Interpreter:
         res = RTResult()
 
         left = res.register(self.visit(node.left_node, context))
+        if res.error: return res
         right = res.register(self.visit(node.right_node, context))
         if res.error: return res
 
@@ -2115,9 +2116,10 @@ class Interpreter:
             if old_value:
                 return res.failure(RTError(
                     node.pos_start, node.pos_end,
-                    f'"{func_name}" is already defined',
+                    f'{func_name} is already defined',
                     context
                 ))
+
             context.symbol_table.object.set(func_name, func_value)
 
         return res.success(func_value)
@@ -2151,10 +2153,6 @@ class Interpreter:
             Null().set_context(context).set_pos(node.pos_start, node.pos_end)
         ).success_return(expr)        
 
-        return res.success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
-        ).success_return(expr)
-    
 #######################################
 # RUN
 #######################################
