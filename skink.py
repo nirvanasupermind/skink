@@ -1,7 +1,6 @@
 # Skink source code
 # Usage permitted under terms of MIT License
 
-#
 #######################################
 # IMPORTS
 #######################################
@@ -126,6 +125,13 @@ TT_BAND     = 'BAND'
 TT_BOR      = 'BOR'
 TT_BXOR     = 'BXOR'
 TT_BNOT     = 'BNOT'
+TT_PLUSEQ   = 'PLUSEQ'
+TT_MINUSEQ  = 'MINUSEQ'
+TT_MULEQ    = 'MULEQ'
+TT_DIVEQ    = 'DIVEQ'
+TT_BANDEQ   = 'BANDEQ'
+TT_BOREQ    = 'BOREQ'
+TT_BXOREQ   = 'BXOREQ'
 TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 KEYWORDS = [
@@ -134,7 +140,9 @@ KEYWORDS = [
     'false',
     'var',
     'if',
-    'else'
+    'else',
+    'for',
+    'while'
 ]
 
 class Token:
@@ -151,6 +159,7 @@ class Token:
                 self.pos_end = pos_end
 
     def display_text(self):
+        # print(self.pos_end.idx)
         if self.type == TT_EOF: return 'end of input'
         return f'token "{self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]}"'
         
@@ -188,17 +197,14 @@ class Lexer:
             elif self.current_char in LETTERS:
                 tokens.append(self.make_identifier())
             elif self.current_char == '+':
-                tokens.append(Token(TT_PLUS, pos_start=self.pos))
-                self.advance()
+                tokens.append(self.make_plus())
+                # self.advance()
             elif self.current_char == '-':
-                tokens.append(Token(TT_MINUS, pos_start=self.pos))
-                self.advance()
+                tokens.append(self.make_minus())
             elif self.current_char == '*':
-                tokens.append(Token(TT_MUL, pos_start=self.pos))
-                self.advance()
+                tokens.append(self.make_mul())
             elif self.current_char == '/':
-                tokens.append(Token(TT_DIV, pos_start=self.pos))
-                self.advance()
+                tokens.append(self.make_div())
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos))
                 self.advance()
@@ -256,9 +262,9 @@ class Lexer:
 
         if dot_count == 0:
             clipped = np.clip(int(num_str), -(2 ** 63), 2 ** 63 - 1)
-            return Token(TT_INT, np.int64(clipped), pos_start, self.pos)
+            return Token(TT_INT, np.int64(clipped), pos_start, self.pos.copy())
         else:
-            return Token(TT_FLOAT, float(num_str), pos_start, self.pos)
+            return Token(TT_FLOAT, float(num_str), pos_start, self.pos.copy())
 
     def make_identifier(self):
         id_str = ''
@@ -269,7 +275,51 @@ class Lexer:
             self.advance()
 
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
-        return Token(tok_type, id_str, pos_start, self.pos)
+        return Token(tok_type, id_str, pos_start, self.pos.copy())
+
+    def make_plus(self):
+        tok_type = TT_PLUS
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_PLUSEQ
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
+
+    def make_minus(self):
+        tok_type = TT_MINUS
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_MINUSEQ
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
+
+    def make_mul(self):
+        tok_type = TT_MUL
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_MULEQ
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
+
+    def make_div(self):
+        tok_type = TT_DIV
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_DIVEQ
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
     def make_not_equals(self):
         tok_type = TT_NOT
@@ -280,7 +330,7 @@ class Lexer:
             self.advance()
             tok_type = TT_NE
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
         
 
     def make_equals(self):
@@ -292,7 +342,7 @@ class Lexer:
             self.advance()
             tok_type = TT_EE
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
     def make_less_than(self):
         tok_type = TT_LT
@@ -303,7 +353,7 @@ class Lexer:
             self.advance()
             tok_type = TT_LTE
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
     def make_greater_than(self):
         tok_type = TT_GT
@@ -314,7 +364,7 @@ class Lexer:
             self.advance()
             tok_type = TT_GTE
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
     def make_and(self):
         tok_type = TT_BAND
@@ -324,8 +374,11 @@ class Lexer:
         if self.current_char == '&':
             self.advance()
             tok_type = TT_AND
+        elif self.current_char == '=':
+            self.advance()
+            tok_type = TT_BANDEQ
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
     def make_or(self):
         tok_type = TT_BOR
@@ -335,8 +388,11 @@ class Lexer:
         if self.current_char == '|':
             self.advance()
             tok_type = TT_OR
+        elif self.current_char == '=':
+            self.advance()
+            tok_type = TT_BOREQ
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
     def make_xor(self):
         tok_type = TT_BXOR
@@ -346,8 +402,11 @@ class Lexer:
         if self.current_char == '^':
             self.advance()
             tok_type = TT_XOR
+        elif self.current_char == '=':
+            self.advance()
+            tok_type = TT_BXOREQ
 
-        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
 #######################################
 # NODES
@@ -442,6 +501,27 @@ class IfElseNode:
 
         self.pos_start = self.condition.pos_start
         self.pos_end = self.else_case.pos_end
+
+
+class ForNode:
+    def __init__(self, statement1_node, statement2_node, statement3_node, body_node):
+        self.statement1_node = statement1_node
+        self.statement2_node = statement2_node
+        self.statement3_node = statement3_node
+        self.body_node = body_node
+
+        self.pos_start = self.statement1_node.pos_start
+        self.pos_end = self.body_node.pos_end
+
+
+class WhileNode:
+	def __init__(self, condition_node, body_node):
+		self.condition_node = condition_node
+		self.body_node = body_node
+
+		self.pos_start = self.condition_node.pos_start
+		self.pos_end = self.body_node.pos_end
+
 
 #######################################
 # PARSE RESULT
@@ -598,7 +678,16 @@ class Parser:
         return self.bin_op(self.xor_expr, (TT_OR, ))
 
     def assignment_expr(self):
-        return self.bin_op(self.or_expr, (TT_EQ,))
+        return self.bin_op(self.or_expr, (
+            TT_EQ, 
+            TT_PLUSEQ, 
+            TT_MINUSEQ, 
+            TT_MULEQ,
+            TT_DIVEQ,
+            TT_BANDEQ,
+            TT_BOREQ,
+            TT_BXOREQ
+        ))
 
     def expr(self):
         res = ParseResult()
@@ -607,9 +696,18 @@ class Parser:
             if res.error: return res
             return res.success(var_declare_expr)
         elif self.current_tok.matches(TT_KEYWORD, 'if'):
-            var_declare_expr = res.register(self.if_expr())
+            if_expr = res.register(self.if_expr())
             if res.error: return res
-            return res.success(var_declare_expr)
+            return res.success(if_expr)
+        elif self.current_tok.matches(TT_KEYWORD, 'for'):
+            for_expr = res.register(self.for_expr())
+            if res.error: return res
+            return res.success(for_expr)
+        elif self.current_tok.matches(TT_KEYWORD, 'while'):
+            while_expr = res.register(self.while_expr())
+            if res.error: return res
+            return res.success(while_expr)
+
         return self.assignment_expr()
 
     def var_declare_expr(self):
@@ -651,7 +749,7 @@ class Parser:
         if self.current_tok.type != TT_LPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                'Expected "("'
+                f'Unexpected {self.current_tok.display_text()}'
             ))
 
         condition = res.register(self.expr())
@@ -661,7 +759,7 @@ class Parser:
         if self.current_tok.type != TT_RPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                'Expected ")"'
+                f'Unexpected {self.current_tok.display_text()}'
             ))
 
         res.register_advancement()
@@ -669,7 +767,7 @@ class Parser:
         if self.current_tok.type != TT_LCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                'Expected "{"'
+                f'Unexpected {self.current_tok.display_text()}'
             ))
 
         res.register_advancement()
@@ -681,7 +779,7 @@ class Parser:
         if self.current_tok.type != TT_RCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                'Expected "}"'
+                f'Unexpected {self.current_tok.display_text()}'
             ))
 
         res.register_advancement()
@@ -692,7 +790,7 @@ class Parser:
                 if self.current_tok.type != TT_LCURLY:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        'Expected "{"'
+                        f'Unexpected {self.current_tok.display_text()}'
                     ))
 
                 res.register_advancement()
@@ -704,7 +802,7 @@ class Parser:
                 if self.current_tok.type != TT_RCURLY:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        'Expected "}"'
+                        f'Unexpected {self.current_tok.display_text()}'
                     ))
 
                 res.register_advancement()
@@ -712,6 +810,131 @@ class Parser:
                 return res.success(IfElseNode(condition, statements, else_case))
         else: 
                 return res.success(IfNode(condition, statements))            
+
+
+    def for_expr(self):
+        res = ParseResult()
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_LPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+
+        res.register_advancement()
+        self.advance()
+
+        statement1 = res.register(self.expr())
+        if res.error: return res
+
+        if self.current_tok.type != TT_NEWLINE:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        statement2 = res.register(self.expr())
+        if res.error: return res
+
+        if self.current_tok.type != TT_NEWLINE:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        statement3 = res.register(self.expr())
+        if res.error: return res
+        if self.current_tok.type != TT_RPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.type != TT_LCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        statements = res.register(self.statements())
+        if res.error: return res
+        
+        if self.current_tok.type != TT_RCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+        
+        res.register_advancement()
+        self.advance()
+
+        return res.success(ForNode(
+            statement1,
+            statement2,
+            statement3,
+            statements
+        ))      
+
+    def while_expr(self):
+        res = ParseResult()
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_LPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        condition = res.register(self.expr())
+        if res.error: return res
+
+        self.reverse()
+        if self.current_tok.type != TT_RPAREN:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.type != TT_LCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        statements = res.register(self.statements())
+
+        if res.error: return res
+        if self.current_tok.type != TT_RCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        return res.success(WhileNode(condition, statements))
+
 
 
     def statements(self):
@@ -1151,7 +1374,7 @@ class Float(Object):
 class Bool(Object):
     def __init__(self, value):
         super().__init__(bool_object)
-        self.value = value
+        self.value = not not value
 
     def get_comparison_eq(self, other):
         if isinstance(other, Bool):
@@ -1185,6 +1408,9 @@ class Bool(Object):
 
     def notted(self):
         return Bool(not self.value).set_context(self.context), None
+
+    def is_true(self):
+        return self.value
 
     def __repr__(self):
         return 'true' if self.value else 'false'
@@ -1263,7 +1489,7 @@ class Interpreter:
                 context
             ))
         
-        return res.success(value.set_context(context).set_pos(node.pos_start, node.pos_end))
+        return res.success(value.set_pos(node.pos_start, node.pos_end))
      
     def visit_VarDeclareNode(self, node, context):
         res = RTResult()
@@ -1324,10 +1550,13 @@ class Interpreter:
 
             var_name = node.left_node.var_name_tok.value
 
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
             value = res.register(self.visit(node.right_node, context))
             if res.error: return res
 
-            context.symbol_table.object.set(var_name, value)
+            old_value.context.symbol_table.object.set(var_name, value)
             return res.success(value)
         elif node.op_tok.type == TT_EE:
             result, error = left.get_comparison_eq(right)
@@ -1353,11 +1582,165 @@ class Interpreter:
             result, error = left.bored_by(right)
         elif node.op_tok.type == TT_BXOR:
             result, error = left.bxored_by(right)
+        elif node.op_tok.type == TT_PLUSEQ:
+
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
             
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.added_to(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+        elif node.op_tok.type == TT_MINUSEQ:
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.subbed_by(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+        elif node.op_tok.type == TT_MULEQ:
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.multed_by(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+        elif node.op_tok.type == TT_DIVEQ:
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.dived_by(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+        elif node.op_tok.type == TT_BANDEQ:
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.banded_by(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+        elif node.op_tok.type == TT_BOREQ:
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.bored_by(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+        elif node.op_tok.type == TT_BXOREQ:
+            if not isinstance(node.left_node, VarAccessNode):
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'Invalid left-hand side in assignment',
+                    context
+                ))
+
+            var_name = node.left_node.var_name_tok.value
+
+            old_value = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+            
+            value = res.register(self.visit(node.right_node, context))
+            # print(value)
+            if res.error: return res
+            
+            result, error = old_value.bxored_by(value)
+            if error: return res.failure(error)
+
+            old_value.context.symbol_table.object.set(var_name, result)
+            return res.success(result)
+
         if error: return res.failure(error)
         return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
             
-
     def visit_UnaryOpNode(self, node, context):
         # print('found un op node!')
         res = RTResult()
@@ -1378,12 +1761,15 @@ class Interpreter:
 
 
     def visit_IfNode(self, node, context): 
+        new_context = Context('if statement', context, node.pos_start)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+
         res = RTResult()
         condition = res.register(self.visit(node.condition, context))
         if res.error: return res
 
         if condition.is_true():
-            if_case = res.register(self.visit(node.if_case, context))
+            if_case = res.register(self.visit(node.if_case, new_context))
             if res.error: return res
 
             return res.success(if_case)
@@ -1391,20 +1777,79 @@ class Interpreter:
             return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_IfElseNode(self, node, context): 
+        if_context = Context('if statement', context, node.pos_start)
+        if_context.symbol_table = SymbolTable(Object(if_context.parent.symbol_table.object))
+
         res = RTResult()
         condition = res.register(self.visit(node.condition, context))
         if res.error: return res
 
         if condition.is_true():
-            if_case = res.register(self.visit(node.if_case, context))
+            if_case = res.register(self.visit(node.if_case, if_context))
             if res.error: return res
 
             return res.success(if_case)
         else:
-            else_case = res.register(self.visit(node.else_case, context))
+            else_context = Context('if statement', context, node.pos_start)
+            else_context.symbol_table = SymbolTable(Object(else_context.parent.symbol_table.object))
+
+            else_case = res.register(self.visit(node.else_case, else_context))
             if res.error: return res
 
             return res.success(else_case)
+
+    def visit_ForNode(self, node, context): 
+        res = RTResult()
+        new_context = Context('for loop', context, node.pos_start)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+
+        statement1 = res.register(self.visit(node.statement1_node, new_context))
+        if res.error: return res
+
+
+        while True:
+            statement2 = res.register(self.visit(node.statement2_node, new_context))
+            if res.error: return res
+
+            statement3 = res.register(self.visit(node.statement3_node, new_context))
+            if res.error: return res
+            
+
+            if not statement2.is_true(): break
+
+            body = res.register(self.visit(node.body_node, new_context))
+            if res.error: return res
+        
+        return res.success(
+            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+    
+    def visit_WhileNode(self, node, context):
+        res = RTResult()
+        new_context = Context('while loop', context, node.pos_start)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+
+
+        while True:
+            condition = res.register(self.visit(node.condition_node, context))
+            if res.error: return res
+
+            if not condition.is_true(): break
+
+            res.register(self.visit(node.body_node, new_context))
+            if res.error: return res
+
+        return res.success(
+            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+
+
+
+
+
+
+
+
 
 
 #######################################
