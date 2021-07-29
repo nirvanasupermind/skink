@@ -12,7 +12,7 @@ import string
 # CONSTANTS
 #######################################
 DIGITS = '0123456789'
-LETTERS = string.ascii_letters + '_'
+LETTERS = string.ascii_letters + '$_'
 LETTERS_DIGITS = LETTERS + DIGITS
 NEWLINES = '\n\r'
 DEFAULT_MAX_DEPTH = 6
@@ -111,6 +111,7 @@ TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
 TT_LCURLY   = 'LCURLY'
 TT_RCURLY   = 'RCURLY'
+TT_COMMA    = 'COMMA'
 TT_EE       = 'EE'
 TT_NE       = 'NE'
 TT_LT       = 'LT'
@@ -142,7 +143,9 @@ KEYWORDS = [
     'if',
     'else',
     'for',
-    'while'
+    'while',
+    'func',
+    'return'
 ]
 
 class Token:
@@ -159,9 +162,12 @@ class Token:
                 self.pos_end = pos_end
 
     def display_text(self):
-        # print(self.pos_end.idx)
+        # print(self.pos_start.idx)
         if self.type == TT_EOF: return 'end of input'
-        return f'token "{self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]}"'
+        return 'token'
+        
+        # todo: make this code work
+        # return f'token "{self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]}"'
         
     def matches(self, type_, value):
         return self.type == type_ and self.value == value
@@ -206,16 +212,19 @@ class Lexer:
             elif self.current_char == '/':
                 tokens.append(self.make_div())
             elif self.current_char == '(':
-                tokens.append(Token(TT_LPAREN, pos_start=self.pos))
+                tokens.append(Token(TT_LPAREN, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == ')':
-                tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                tokens.append(Token(TT_RPAREN, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '{':
-                tokens.append(Token(TT_LCURLY, pos_start=self.pos))
+                tokens.append(Token(TT_LCURLY, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '}':
-                tokens.append(Token(TT_RCURLY, pos_start=self.pos))
+                tokens.append(Token(TT_RCURLY, pos_start=self.pos.copy()))
+                self.advance()
+            elif self.current_char == ',':
+                tokens.append(Token(TT_COMMA, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '!':
                 tokens.append(self.make_not_equals())
@@ -232,10 +241,10 @@ class Lexer:
             elif self.current_char == '^':
                 tokens.append(self.make_xor())
             elif self.current_char == '~':
-                tokens.append(Token(TT_BNOT, pos_start=self.pos))
+                tokens.append(Token(TT_BNOT, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char in NEWLINES + ';':
-                tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
+                tokens.append(Token(TT_NEWLINE, pos_start=self.pos.copy()))
                 self.advance()
             else:
                 pos_start = self.pos.copy()
@@ -243,7 +252,7 @@ class Lexer:
                 self.advance()
                 return [], IllegalCharError(pos_start, self.pos, f'"{char}"')
 
-        tokens.append(Token(TT_EOF, pos_start=self.pos))
+        tokens.append(Token(TT_EOF, pos_start=self.pos.copy()))
         return tokens, None
 
     def make_number(self):
@@ -523,10 +532,49 @@ class WhileNode:
 		self.pos_end = self.body_node.pos_end
 
 
+class FuncDefNode:
+    def __init__(self, var_name_tok, arg_name_toks, body_node):
+        self.var_name_tok = var_name_tok
+        self.arg_name_toks = arg_name_toks
+        self.body_node = body_node
+
+        if self.var_name_tok:
+            self.pos_start = self.var_name_tok.pos_start
+        elif len(self.arg_name_toks) > 0:
+            self.pos_start = self.arg_name_toks[0].pos_start
+        else:
+            self.pos_start = self.body_node.pos_start
+
+        self.pos_end = self.body_node.pos_end
+
+
+class CallNode:
+    def __init__(self, node_to_call, arg_nodes):
+        self.node_to_call = node_to_call
+        self.arg_nodes = arg_nodes
+
+        self.pos_start = self.node_to_call.pos_start
+
+        if len(self.arg_nodes) > 0:
+            self.pos_end = self.arg_nodes[len(self.arg_nodes) - 1].pos_end
+        else:
+            self.pos_end = self.node_to_call.pos_end
+
+
+class ReturnNode:
+    def __init__(self, node):
+        self.node = node
+
+        self.pos_start = node.pos_start
+        self.pos_end = node.pos_end
+
+    def __repr__(self):
+        return f'({self.node})'
+
+
 #######################################
 # PARSE RESULT
 #######################################
-
 class ParseResult:
     def __init__(self):
         self.error = None
@@ -563,7 +611,6 @@ class ParseResult:
 #######################################
 # PARSER
 #######################################
-
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -642,13 +689,64 @@ class Parser:
                     f'Unexpected {self.current_tok.display_text()}'
                 ))
 
+        elif self.current_tok.matches(TT_KEYWORD, 'func'):
+            func_def = res.register(self.func_def())
+            if res.error: return res
+            return res.success(func_def)
+
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
             f'Unexpected {self.current_tok.display_text()}'
         ))
 
+
+    def call(self):
+        res = ParseResult()
+        factor = res.register(self.factor())
+        if res.error: return res
+
+        if self.current_tok.type == TT_LPAREN:
+            res.register_advancement()
+            self.advance()
+            arg_nodes = []
+
+            if self.current_tok.type == TT_RPAREN:
+                res.register_advancement()
+                self.advance()
+            else:
+                arg_nodes.append(res.register(self.expr()))
+                if res.error:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        f'Unexpected {self.current_tok.display_text()}'
+                    ))
+
+                while self.current_tok.type == TT_COMMA:
+                    res.register_advancement()
+                    self.advance()
+
+                    arg_nodes.append(res.register(self.expr()))
+                    if res.error: return res
+
+                    # res.register_advancement()
+                    # self.advance()
+                
+                
+                # self.reverse()
+
+                if self.current_tok.type != TT_RPAREN:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        f'Unexpected {self.current_tok.display_text()}'
+                    ))
+
+                res.register_advancement()
+                self.advance()
+            return res.success(CallNode(factor, arg_nodes))
+        return res.success(factor)
+        
     def term(self):
-        return self.bin_op(self.factor, (TT_MUL, TT_DIV))
+        return self.bin_op(self.call, (TT_MUL, TT_DIV))
 
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -707,6 +805,10 @@ class Parser:
             while_expr = res.register(self.while_expr())
             if res.error: return res
             return res.success(while_expr)
+        elif self.current_tok.matches(TT_KEYWORD, 'return'):
+            return_expr = res.register(self.return_expr())
+            if res.error: return res
+            return res.success(return_expr)
 
         return self.assignment_expr()
 
@@ -936,6 +1038,99 @@ class Parser:
         return res.success(WhileNode(condition, statements))
 
 
+    def func_def(self):
+        res = ParseResult()
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_IDENTIFIER:
+            var_name_tok = self.current_tok
+            res.register_advancement()
+            self.advance()
+            if self.current_tok.type != TT_LPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f'Unexepcted {self.current_tok.display_text}'
+                ))
+        else:
+            var_name_tok = None
+            if self.current_tok.type != TT_LPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f'Unexepcted {self.current_tok.display_text}'
+                ))
+        
+        res.register_advancement()
+        self.advance()
+        arg_name_toks = []
+
+        if self.current_tok.type == TT_IDENTIFIER:
+            arg_name_toks.append(self.current_tok)
+            res.register_advancement()
+            self.advance()
+            
+            while self.current_tok.type == TT_COMMA:
+                res.register_advancement()
+                self.advance()
+
+                if self.current_tok.type != TT_IDENTIFIER:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        f'Unexpected {self.current_tok.display_text()}'
+                    ))
+
+                arg_name_toks.append(self.current_tok)
+                res.register_advancement()
+                self.advance()
+            
+            if self.current_tok.type != TT_RPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f'Unexpected {self.current_tok.display_text()}'
+                ))
+        else:
+            if self.current_tok.type != TT_RPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f'Unexpected {self.current_tok.display_text()}'
+                ))
+
+        res.register_advancement()
+        self.advance()
+        if self.current_tok.type != TT_LCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        statements = res.register(self.statements())
+
+        if res.error: return res
+        if self.current_tok.type != TT_RCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f'Unexpected {self.current_tok.display_text()}'
+            ))
+
+        res.register_advancement()
+        self.advance()
+        return res.success(FuncDefNode(
+            var_name_tok,
+            arg_name_toks,
+            statements  
+        ))
+
+    def return_expr(self):
+        res = ParseResult()
+        res.register_advancement()
+        self.advance()
+        expr = res.register(self.expr())
+        if res.error: return res
+
+        return res.success(ReturnNode(expr))
 
     def statements(self):
         res = ParseResult()
@@ -999,23 +1194,55 @@ class Parser:
 #######################################
 # RUNTIME RESULT
 #######################################
+
 class RTResult:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.value = None
         self.error = None
-    
+        self.func_return_value = None
+
     def register(self, res):
-        if res.error: self.error = res.error
+        self.error = res.error
+        self.func_return_value = res.func_return_value
         return res.value
 
     def success(self, value):
+        self.reset()
         self.value = value
         return self
+
+    def success_return(self, value):
+        # self.reset()
+        self.func_return_value = value
+        return self
     
+    def success_continue(self):
+        self.reset()
+        self.loop_should_continue = True
+        return self
+
+    def success_break(self):
+        self.reset()
+        self.loop_should_break = True
+        return self
+
     def failure(self, error):
+        self.reset()
         self.error = error
         return self
 
+    def should_return(self):
+        # Note: this will allow you to continue and break outside the current function
+        return (
+            self.error or
+            self.func_return_value or
+            self.loop_should_continue or
+            self.loop_should_break
+        )
+        
 #######################################
 # VALUES
 #######################################
@@ -1095,7 +1322,7 @@ class Object:
 
     def notted(self):
         return None, self.illegal_operation()
-    
+
     def banded_by(self, other):
         return None, self.illegal_operation(other)
     
@@ -1106,6 +1333,9 @@ class Object:
         return None, self.illegal_operation(other)
     
     def bnotted(self):
+        return None, self.illegal_operation()
+
+    def execute(self, args):
         return None, self.illegal_operation()
 
     def is_true(self):
@@ -1414,6 +1644,18 @@ class Bool(Object):
 
     def __repr__(self):
         return 'true' if self.value else 'false'
+
+class Function(Object):
+    def __init__(self, name, func):
+        super().__init__(function_object)
+        self.name = name or '<anonymous>'
+        self.func = func
+     
+    def execute(self, args):
+        return self.func(args)
+  
+    def __repr__(self):
+        return f'<function {self.name}>'
         
 #######################################
 # OBJECTS
@@ -1423,6 +1665,7 @@ null_object = Object(object_object)
 int_object = Object(object_object)
 float_object = Object(object_object)
 bool_object = Object(object_object)
+function_object = Object(object_object)
 
 #######################################
 # CONTEXT
@@ -1515,11 +1758,10 @@ class Interpreter:
         for i in range(0, len(node.element_nodes)):
             line = res.register(self.visit(node.element_nodes[i], context))
             if res.error: return res
+            if res.func_return_value: return res
             lines.append(line)
         
         return res.success(lines[-1])
-
-
     
     def visit_BinOpNode(self, node, context):
         # print('found bin op node!')
@@ -1843,15 +2085,76 @@ class Interpreter:
             Null().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
+    def visit_FuncDefNode(self, node, context):
+        res = RTResult()
+        func_name = node.var_name_tok.value
+        body_node = node.body_node
+        arg_names = [arg_name.value for arg_name in node.arg_name_toks]
+
+        new_context = Context(func_name, context, node.pos_start)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+
+        def func(args):
+            for i in range(len(arg_names)):
+                arg_name = arg_names[i]
+                arg_value = args[i] if i < len(args) else Null().set_pos(node.pos_start, node.pos_end)
+                arg_value.set_context(new_context)
+                new_context.symbol_table.object.set(arg_name, arg_value)
+            
+            tmp = self.visit(body_node, new_context)
+            func_return_value, error = tmp.func_return_value, tmp.error
+            if error: return None, error
+
+            return func_return_value or Null().set_context(new_context).set_pos(node.pos_start, node.pos_end), None
+        
+        func_value = Function(func_name, func).set_context(context).set_pos(node.pos_start, node.pos_end)
+        
+        
+        if node.var_name_tok:
+            old_value = context.symbol_table.object.slots.get(func_name, None)
+            if old_value:
+                return res.failure(RTError(
+                    node.pos_start, node.pos_end,
+                    f'"{func_name}" is already defined',
+                    context
+                ))
+            context.symbol_table.object.set(func_name, func_value)
+
+        return res.success(func_value)
+        
+       
+    def visit_CallNode(self, node, context):
+        res = RTResult()
+        args = []
+
+        value_to_call = res.register(self.visit(node.node_to_call, context))
+        if res.error: return res
+        value_to_call = value_to_call.set_pos(node.pos_start, node.pos_end)
+
+        for arg_node in node.arg_nodes:
+            args.append(res.register(self.visit(arg_node, context)))
+            if res.error: return res
+
+        return_value, error = value_to_call.execute(args)
+        # print(return_value)
+        if error: return res.failure(error)
+
+        return res.success(return_value)
 
 
+    def visit_ReturnNode(self, node, context):
+        res = RTResult()
+        expr = res.register(self.visit(node.node, context))
+        if res.error: return res
 
+        res.success(
+            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+        ).success_return(expr)        
 
-
-
-
-
-
+        return res.success(
+            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+        ).success_return(expr)
+    
 #######################################
 # RUN
 #######################################
@@ -1863,6 +2166,7 @@ global_symbol_table.object.set('Null', null_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
+global_symbol_table.object.set('Function', function_object)
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
