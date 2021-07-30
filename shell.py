@@ -10,14 +10,14 @@ try:
 except:
     pass #readline not available
 
-
-while True:
-    text = input('> ')
-    if text == 'exit': 
-        break
-    else:
-        result, error = skink.runstring(text)
-        if error:
-            print(error.as_string())
-        else: 
-            print(result)
+def run_shell():
+    while True:
+        text = input('> ')
+        if text == 'exit': 
+            break
+        else:
+            result, error = skink.runstring(text)
+            if error:
+                print(error.as_string())
+            else: 
+                print(result)

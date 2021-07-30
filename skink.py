@@ -100,6 +100,7 @@ class Position:
 
 TT_INT		= 'INT'
 TT_FLOAT    = 'FLOAT'
+TT_STRING   = 'STRING'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_KEYWORD  = 'KEYWORD'
 TT_PLUS     = 'PLUS'
@@ -164,10 +165,10 @@ class Token:
     def display_text(self):
         # print(self.pos_start.idx)
         if self.type == TT_EOF: return 'end of input'
-        return 'token'
+        # return 'token'
         
         # todo: make this code work
-        # return f'token "{self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]}"'
+        return f'token "{self.pos_start.ftxt[self.pos_start.idx:self.pos_end.idx]}"'
         
     def matches(self, type_, value):
         return self.type == type_ and self.value == value
@@ -420,6 +421,11 @@ class Lexer:
 #######################################
 # NODES
 #######################################
+class EmptyNode:
+    def __init__(self, pos_start, pos_end):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
 class NullNode:
     def __init__(self, tok):
         self.tok = tok
@@ -570,7 +576,7 @@ class ReturnNode:
 
     def __repr__(self):
         return f'({self.node})'
-
+    
 
 #######################################
 # PARSE RESULT
@@ -789,6 +795,11 @@ class Parser:
 
     def expr(self):
         res = ParseResult()
+
+        while self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+        
         if self.current_tok.matches(TT_KEYWORD, 'var'):
             var_declare_expr = res.register(self.var_declare_expr())
             if res.error: return res
@@ -1205,18 +1216,22 @@ class RTResult:
         self.func_return_value = None
 
     def register(self, res):
+        # print(res)
         self.error = res.error
         self.func_return_value = res.func_return_value
+        # print(res.value)
         return res.value
 
     def success(self, value):
-        self.reset()
+        # self.reset()
         self.value = value
+        # print(self.value)
         return self
 
     def success_return(self, value):
         # self.reset()
         self.func_return_value = value
+        # print(self.value)
         return self
     
     def success_continue(self):
@@ -1384,6 +1399,12 @@ class Null(Object):
     def __init__(self):
         super().__init__(null_object)
     
+    def get_comparison_eq(self, other):
+        return Bool(isinstance(other, Null)), None
+
+    def get_comparison_ne(self, other):
+        return Bool(not isinstance(other, Null)), None
+
     def is_true(self):
         return False
         
@@ -1732,6 +1753,8 @@ class Interpreter:
                 context
             ))
         
+        if not value.context: value.set_context(context)
+
         return res.success(value.set_pos(node.pos_start, node.pos_end))
      
     def visit_VarDeclareNode(self, node, context):
@@ -1758,7 +1781,13 @@ class Interpreter:
         for i in range(0, len(node.element_nodes)):
             line = res.register(self.visit(node.element_nodes[i], context))
             if res.error: return res
-            if res.func_return_value: return res
+            # print(res.func_return_value)
+            # print(res.value)
+            if res.func_return_value: 
+                return res.success(
+                    Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+                )
+            
             lines.append(line)
         
         return res.success(lines[-1])
@@ -1769,6 +1798,8 @@ class Interpreter:
 
         left = res.register(self.visit(node.left_node, context))
         if res.error: return res
+
+
         right = res.register(self.visit(node.right_node, context))
         if res.error: return res
 
@@ -2088,7 +2119,7 @@ class Interpreter:
 
     def visit_FuncDefNode(self, node, context):
         res = RTResult()
-        func_name = node.var_name_tok.value
+        func_name = node.var_name_tok.value if node.var_name_tok else '<anonymous>'
         body_node = node.body_node
         arg_names = [arg_name.value for arg_name in node.arg_name_toks]
 
@@ -2109,7 +2140,6 @@ class Interpreter:
             return func_return_value or Null().set_context(new_context).set_pos(node.pos_start, node.pos_end), None
         
         func_value = Function(func_name, func).set_context(context).set_pos(node.pos_start, node.pos_end)
-        
         
         if node.var_name_tok:
             old_value = context.symbol_table.object.slots.get(func_name, None)
@@ -2140,18 +2170,18 @@ class Interpreter:
         return_value, error = value_to_call.execute(args)
         # print(return_value)
         if error: return res.failure(error)
+        # print(f'{value_to_call.name} {args} {return_value}')
 
-        return res.success(return_value)
-
+        return res.success(return_value.set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_ReturnNode(self, node, context):
         res = RTResult()
         expr = res.register(self.visit(node.node, context))
         if res.error: return res
 
-        res.success(
+        return res.success_return(expr).success(
             Null().set_context(context).set_pos(node.pos_start, node.pos_end)
-        ).success_return(expr)        
+        )      
 
 #######################################
 # RUN
@@ -2159,12 +2189,35 @@ class Interpreter:
 global_symbol_table = SymbolTable(Object(object_object))
 global_symbol_table.object.set('global', global_symbol_table.object)
 
+def normalize_args(args, num_args):
+    new_args = []
+    for i in range(0, num_args):
+        arg_value = args[i] if i < len(args) else Null()
+        new_args.append(arg_value)
+    
+    return new_args
+
+def print_func(args):
+    args = normalize_args(args, 1)
+    print(args[0], end=' ')
+    return Null(), None
+
+def println_func(args):
+    args = normalize_args(args, 1)
+
+    print(args[0])
+    return Null(), None
+
+global_symbol_table.object.set('print', Function('print', print_func))
+global_symbol_table.object.set('println', Function('println', println_func))
+
 global_symbol_table.object.set('Object', object_object)
 global_symbol_table.object.set('Null', null_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
 global_symbol_table.object.set('Function', function_object)
+
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
@@ -2185,3 +2238,7 @@ def runstring(text, fn='<anonymous>'):
     if result.error: return None, result.error
 
     return result.value, None
+
+def run(fn):
+    f = open(fn, 'r')
+    return runstring(f.read(), fn)

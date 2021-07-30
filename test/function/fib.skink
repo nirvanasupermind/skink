@@ -1,0 +1,13 @@
+func fib(n) {
+    println(null)
+    println(n)
+    if(n <= 1) { 
+        var y = 1
+        return y; 
+    } else {
+        var x = fib(n - 1) + fib(n - 2);
+        return x;
+    }
+};
+
+println(fib(6))
