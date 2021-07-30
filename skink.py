@@ -167,7 +167,7 @@ class Token:
             else:
                 self.pos_end = pos_end
 
-    def error_text(self):
+    def get_error_message(self):
         # print(self.pos_start.idx)
         if self.type == TT_EOF: return 'unexpected end of input'
         # return 'token'
@@ -715,7 +715,7 @@ class Parser:
         if not res.error and self.current_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
         return res
 
@@ -769,7 +769,7 @@ class Parser:
             else:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f'{self.current_tok.error_text()}'
+                    self.current_tok.get_error_message()
                 ))
 
         elif self.current_tok.matches(TT_KEYWORD, 'func'):
@@ -779,7 +779,7 @@ class Parser:
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            f'{self.current_tok.error_text()}'
+            self.current_tok.get_error_message()
         ))
 
 
@@ -801,7 +801,7 @@ class Parser:
                 if res.error:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f'{self.current_tok.error_text()}'
+                        self.current_tok.get_error_message()
                     ))
 
                 while self.current_tok.type == TT_COMMA:
@@ -820,7 +820,7 @@ class Parser:
                 if self.current_tok.type != TT_RPAREN:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f'{self.current_tok.error_text()}'
+                        self.current_tok.get_error_message()
                     ))
 
                 res.register_advancement()
@@ -912,7 +912,7 @@ class Parser:
         if self.current_tok.type != TT_IDENTIFIER:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
         
         var_name = self.current_tok
@@ -923,7 +923,7 @@ class Parser:
         if self.current_tok.type != TT_EQ:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -943,7 +943,7 @@ class Parser:
         if self.current_tok.type != TT_LPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         condition = res.register(self.expr())
@@ -953,7 +953,7 @@ class Parser:
         if self.current_tok.type != TT_RPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -961,7 +961,7 @@ class Parser:
         if self.current_tok.type != TT_LCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -973,7 +973,7 @@ class Parser:
         if self.current_tok.type != TT_RCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -984,7 +984,7 @@ class Parser:
                 if self.current_tok.type != TT_LCURLY:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f'{self.current_tok.error_text()}'
+                        self.current_tok.get_error_message()
                     ))
 
                 res.register_advancement()
@@ -996,7 +996,7 @@ class Parser:
                 if self.current_tok.type != TT_RCURLY:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f'{self.current_tok.error_text()}'
+                        self.current_tok.get_error_message()
                     ))
 
                 res.register_advancement()
@@ -1014,7 +1014,7 @@ class Parser:
         if self.current_tok.type != TT_LPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
 
@@ -1027,7 +1027,7 @@ class Parser:
         if self.current_tok.type != TT_NEWLINE:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1039,7 +1039,7 @@ class Parser:
         if self.current_tok.type != TT_NEWLINE:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1050,7 +1050,7 @@ class Parser:
         if self.current_tok.type != TT_RPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1058,7 +1058,7 @@ class Parser:
         if self.current_tok.type != TT_LCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1070,7 +1070,7 @@ class Parser:
         if self.current_tok.type != TT_RCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
         
         res.register_advancement()
@@ -1091,7 +1091,7 @@ class Parser:
         if self.current_tok.type != TT_LPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         condition = res.register(self.expr())
@@ -1101,7 +1101,7 @@ class Parser:
         if self.current_tok.type != TT_RPAREN:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1109,7 +1109,7 @@ class Parser:
         if self.current_tok.type != TT_LCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1121,7 +1121,7 @@ class Parser:
         if self.current_tok.type != TT_RCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1168,7 +1168,7 @@ class Parser:
                 if self.current_tok.type != TT_IDENTIFIER:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f'{self.current_tok.error_text()}'
+                        self.current_tok.get_error_message()
                     ))
 
                 arg_name_toks.append(self.current_tok)
@@ -1178,13 +1178,13 @@ class Parser:
             if self.current_tok.type != TT_RPAREN:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f'{self.current_tok.error_text()}'
+                    self.current_tok.get_error_message()
                 ))
         else:
             if self.current_tok.type != TT_RPAREN:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f'{self.current_tok.error_text()}'
+                    self.current_tok.get_error_message()
                 ))
 
         res.register_advancement()
@@ -1192,7 +1192,7 @@ class Parser:
         if self.current_tok.type != TT_LCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1204,7 +1204,7 @@ class Parser:
         if self.current_tok.type != TT_RCURLY:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f'{self.current_tok.error_text()}'
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1233,7 +1233,7 @@ class Parser:
         if self.current_tok.type != TT_LSQUARE:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected '['"
+                self.current_tok.get_error_message()
             ))
 
         res.register_advancement()
@@ -1246,8 +1246,8 @@ class Parser:
             element_nodes.append(res.register(self.expr()))
             if res.error:
                 return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                "Expected ']', 'VAR', 'IF', 'FOR', 'WHILE', 'FUN', int, float, identifier, '+', '-', '(', '[' or 'NOT'"
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    self.current_tok.get_error_message()
                 ))
 
             while self.current_tok.type == TT_COMMA:
@@ -1259,8 +1259,8 @@ class Parser:
 
             if self.current_tok.type != TT_RSQUARE:
                 return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected ',' or ']'"
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    self.current_tok.get_error_message()
                 ))
 
             res.register_advancement()
