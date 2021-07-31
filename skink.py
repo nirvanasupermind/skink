@@ -19,6 +19,10 @@ NEWLINES = '\n\r'
 DEFAULT_MAX_DEPTH = 6
 
 #######################################
+# UTILITY FUNCTIONS
+#######################################
+
+#######################################
 # ERRORS
 #######################################
 
@@ -64,7 +68,8 @@ class RTError(LangError):
         ctx = self.context
 
         while ctx:
-            result = f'{result}\n\t{pos.fn}:{pos.ln + 1}:{pos.col + 1}: in {ctx.display_name}'
+            if ctx.should_display:
+                result = f'\n\t{pos.fn}:{pos.ln + 1}:{pos.col + 1}: in {ctx.display_name}{result}'
             pos = ctx.parent_entry_pos
             ctx = ctx.parent
 
@@ -118,6 +123,7 @@ TT_LSQUARE  = 'LSQUARE'
 TT_RSQUARE  = 'RSQUARE'
 TT_LCURLY   = 'LCURLY'
 TT_RCURLY   = 'RCURLY'
+TT_DOT      = 'DOT'
 TT_COMMA    = 'COMMA'
 TT_EE       = 'EE'
 TT_NE       = 'NE'
@@ -240,6 +246,9 @@ class Lexer:
             elif self.current_char == '}':
                 tokens.append(Token(TT_RCURLY, pos_start=self.pos.copy()))
                 self.advance()
+            elif self.current_char == '.':
+                tokens.append(Token(TT_DOT, pos_start=self.pos.copy()))
+                self.advance()
             elif self.current_char == ',':
                 tokens.append(Token(TT_COMMA, pos_start=self.pos.copy()))
                 self.advance()
@@ -267,7 +276,7 @@ class Lexer:
                 pos_start = self.pos.copy()
                 char = self.current_char
                 self.advance()
-                return [], IllegalCharError(pos_start, self.pos, f'"{char}"')
+                return [], IllegalCharError(pos_start, self.pos, f'illegal character "{char}"')
 
         tokens.append(Token(TT_EOF, pos_start=self.pos.copy()))
         return tokens, None
@@ -549,7 +558,6 @@ class ListNode:
         self.pos_start = pos_start
         self.pos_end = pos_end
 
-
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
         self.left_node = left_node
@@ -640,6 +648,20 @@ class CallNode:
             self.pos_end = self.node_to_call.pos_end
 
 
+
+class CallNode:
+    def __init__(self, node_to_call, arg_nodes):
+        self.node_to_call = node_to_call
+        self.arg_nodes = arg_nodes
+
+        self.pos_start = self.node_to_call.pos_start
+
+        if len(self.arg_nodes) > 0:
+            self.pos_end = self.arg_nodes[len(self.arg_nodes) - 1].pos_end
+        else:
+            self.pos_end = self.node_to_call.pos_end
+
+
 class ReturnNode:
     def __init__(self, node):
         self.node = node
@@ -649,7 +671,22 @@ class ReturnNode:
 
     def __repr__(self):
         return f'({self.node})'
-    
+
+class DotNotationNode:
+    def __init__(self, obj_node, prop_tok):
+        self.obj_node = obj_node
+        self.prop_tok = prop_tok
+        
+        self.pos_start = self.obj_node.pos_start
+        self.pos_end = self.prop_tok.pos_end
+
+class BracketNotationNode:
+    def __init__(self, obj_node, prop_node):
+        self.obj_node = obj_node
+        self.prop_node = prop_node
+        
+        self.pos_start = self.obj_node.pos_start
+        self.pos_end = self.prop_node.pos_end
 
 #######################################
 # PARSE RESULT
@@ -795,44 +832,83 @@ class Parser:
         factor = res.register(self.factor())
         if res.error: return res
 
-        if self.current_tok.type == TT_LPAREN:
-            res.register_advancement()
-            self.advance()
-            arg_nodes = []
-
-            if self.current_tok.type == TT_RPAREN:
+        while self.current_tok.type in (TT_LPAREN, TT_DOT, TT_LSQUARE):
+            if self.current_tok.type == TT_LPAREN:
                 res.register_advancement()
                 self.advance()
-            else:
-                arg_nodes.append(res.register(self.expr()))
-                if res.error:
-                    return res.failure(InvalidSyntaxError(
-                        self.current_tok.pos_start, self.current_tok.pos_end,
-                        self.current_tok.get_error_message()
-                    ))
+                arg_nodes = []
 
-                while self.current_tok.type == TT_COMMA:
+                if self.current_tok.type == TT_RPAREN:
                     res.register_advancement()
                     self.advance()
-
+                else:
                     arg_nodes.append(res.register(self.expr()))
-                    if res.error: return res
+                    if res.error:
+                        return res.failure(InvalidSyntaxError(
+                            self.current_tok.pos_start, self.current_tok.pos_end,
+                            self.current_tok.get_error_message()
+                        ))
 
-                    # res.register_advancement()
-                    # self.advance()
-                
-                
-                # self.reverse()
+                    while self.current_tok.type == TT_COMMA:
+                        res.register_advancement()
+                        self.advance()
 
-                if self.current_tok.type != TT_RPAREN:
+                        arg_nodes.append(res.register(self.expr()))
+                        if res.error: return res
+
+                        # res.register_advancement()
+                        # self.advance()
+                    
+                    
+                    # self.reverse()
+
+                    if self.current_tok.type != TT_RPAREN:
+                        return res.failure(InvalidSyntaxError(
+                            self.current_tok.pos_start, self.current_tok.pos_end,
+                            self.current_tok.get_error_message()
+                        ))
+
+                    res.register_advancement()
+                    self.advance()
+                factor = CallNode(factor, arg_nodes)
+            elif self.current_tok.type == TT_DOT:
+                res.register_advancement()
+                self.advance()
+
+                if self.current_tok.type != TT_IDENTIFIER:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
                         self.current_tok.get_error_message()
                     ))
 
+                prop_tok = self.current_tok
+                
                 res.register_advancement()
                 self.advance()
-            return res.success(CallNode(factor, arg_nodes))
+                factor = DotNotationNode(factor, prop_tok)
+            else:
+                if self.current_tok.type != TT_LSQUARE:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        self.current_tok.get_error_message()
+                    ))     
+
+                res.register_advancement()
+                self.advance()
+                prop_node = res.register(self.expr())
+                if res.error: return res
+
+                if self.current_tok.type != TT_RSQUARE:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        self.current_tok.get_error_message()
+                    ))     
+
+                res.register_advancement()
+                self.advance()
+
+                factor = BracketNotationNode(factor, prop_node)
+                    
         return res.success(factor)
         
     def term(self):
@@ -1497,8 +1573,8 @@ class Object:
     
     def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
         # print(depth_decr)
-        keys = list(self.slots.keys())
-        values = list(self.slots.values())
+        keys = sorted(list(self.slots.keys()))
+        values = [self.slots[key] for key in keys]
 
         if len(keys) == 0: return '{}'
         if depth_decr < 0:
@@ -1577,13 +1653,13 @@ class Int(Object):
         
     def dived_by(self, other): 
         if isinstance(other, (Int, Float)):
-            if repr(other) == '0':
+            if str(other) == '0':
                 return None, RTError(
                     other.pos_start, other.pos_end,
                     'division by zero',
                     self.context
                 )
-            elif repr(other) == '0.0':
+            elif str(other) == '0.0':
                 return Float(np.inf).set_context(self.context), None
             else:
                 result = self.value / other.value if isinstance(other.value, float) else self.value // other.value
@@ -1696,7 +1772,7 @@ class Float(Object):
     
     def dived_by(self, other): 
         if isinstance(other, (Int, Float)):
-            if repr(other) in ('0', '0.0'):
+            if str(other) in ('0', '0.0'):
                 return Float(np.inf).set_context(self.context), None
             else:
                 result = self.value / other.value
@@ -1874,11 +1950,12 @@ function_object = Object(object_object)
 # CONTEXT
 #######################################
 class Context:
-    def __init__(self, display_name, parent=None, parent_entry_pos=None):
+    def __init__(self, display_name, parent=None, parent_entry_pos=None, should_display=False):
         self.display_name = display_name
         self.parent = parent
         self.parent_entry_pos = parent_entry_pos
         self.symbol_table = None
+        self.should_display = should_display
 
 #######################################
 # SYMBOL TABLE
@@ -1975,6 +2052,38 @@ class Interpreter:
         context.symbol_table.object.set(var_name, value)
         return res.success(value)
           
+    def visit_DotNotationNode(self, node, context):
+        res = RTResult()
+        obj = res.register(self.visit(node.obj_node, context))
+        if res.error: return res
+
+        prop = node.prop_tok.value
+
+        result = obj.get(prop)
+        if result == None:
+            return res.success(
+                Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        else:
+            return res.success(result)
+
+    def visit_BracketNotationNode(self, node, context):
+        res = RTResult()
+        obj = res.register(self.visit(node.obj_node, context))
+        if res.error: return res
+        
+        prop = res.register(self.visit(node.prop_node, context))
+        if res.error: return res
+        
+        result = obj.get(prop)
+        if result == None:
+            return res.success(
+                Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            )
+        else:
+            return res.success(result)
+
+
     def visit_StatementsNode(self, node, context):
         res = RTResult() 
         lines = []
@@ -1992,6 +2101,63 @@ class Interpreter:
         
         return res.success(lines[-1])
     
+    def in_place_op(self, node, context, op):
+            res = RTResult()
+
+            left = res.register(self.visit(node.left_node, context))
+            if res.error: return res
+
+            right = res.register(self.visit(node.right_node, context))
+            if res.error: return res
+
+            if isinstance(node.left_node, VarAccessNode):
+                var_name = node.left_node.var_name_tok.value
+
+                old_value = res.register(self.visit(node.left_node, context))
+                if res.error: return res
+                
+                value, error = op(old_value, right)
+                if error: return res.failure(error)
+
+                old_value.context.symbol_table.object.set(var_name, value)
+                return res.success(value)
+            elif isinstance(node.left_node, DotNotationNode):
+                obj = res.register(self.visit(node.left_node.obj_node, context))
+                if res.error: return res
+
+                prop = node.left_node.prop_tok.value
+
+                old_value = res.register(self.visit(node.left_node, context))
+                if res.error: return res
+
+                value, error = op(old_value, right)
+                if error: return res.failure(error)
+
+                obj.set(prop, value)            
+                return res.success(value)
+            elif isinstance(node.left_node, BracketNotationNode):
+                obj = res.register(self.visit(node.left_node.obj_node, context))
+                if res.error: return res
+
+                prop = res.register(self.visit(node.left_node.prop_node, context))
+                if res.error: return res
+
+                old_value = res.register(self.visit(node.left_node, context))
+                if res.error: return res
+
+                value, error = op(old_value, right)
+                if error: return res.failure(error)
+
+                obj.set(prop, value)            
+                return res.success(value)
+            else:
+                return res.failure(RTError(
+                    node.left_node.pos_start, node.left_node.pos_end,
+                    'invalid left-hand side in assignment',
+                    context
+                ))
+
+
     def visit_BinOpNode(self, node, context):
         # print('found bin op node!')
         res = RTResult()
@@ -2016,23 +2182,43 @@ class Interpreter:
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right)
         elif node.op_tok.type == TT_EQ:      
-            if not isinstance(node.left_node, VarAccessNode):
+            if isinstance(node.left_node, VarAccessNode):
+                var_name = node.left_node.var_name_tok.value
+
+                old_value = res.register(self.visit(node.left_node, context))
+                if res.error: return res
+                
+                value = right
+
+                old_value.context.symbol_table.object.set(var_name, value)
+                return res.success(value)
+            elif isinstance(node.left_node, DotNotationNode):
+                obj = res.register(self.visit(node.left_node.obj_node, context))
+                if res.error: return res
+
+                prop = node.left_node.prop_tok.value
+                value = right
+
+                obj.set(prop, value)
+                return res.success(value)
+            elif isinstance(node.left_node, BracketNotationNode):
+                obj = res.register(self.visit(node.left_node.obj_node, context))
+                if res.error: return res
+
+                prop = res.register(self.visit(node.left_node.prop_node, context))
+                if res.error: return res
+                
+                value = right
+
+                obj.set(prop, value)
+                return res.success(value)
+            else:
                 return res.failure(RTError(
                     node.left_node.pos_start, node.left_node.pos_end,
                     'invalid left-hand side in assignment',
                     context
                 ))
 
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
-            if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            if res.error: return res
-
-            old_value.context.symbol_table.object.set(var_name, value)
-            return res.success(value)
         elif node.op_tok.type == TT_EE:
             result, error = left.get_comparison_eq(right)
         elif node.op_tok.type == TT_NE:
@@ -2058,161 +2244,34 @@ class Interpreter:
         elif node.op_tok.type == TT_BXOR:
             result, error = left.bxored_by(right)
         elif node.op_tok.type == TT_PLUSEQ:
-
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.added_to(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.added_to(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
         elif node.op_tok.type == TT_MINUSEQ:
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.subbed_by(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.subbed_by(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
         elif node.op_tok.type == TT_MULEQ:
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.multed_by(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.multed_by(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
         elif node.op_tok.type == TT_DIVEQ:
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.dived_by(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.dived_by(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
         elif node.op_tok.type == TT_BANDEQ:
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.banded_by(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.banded_by(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
         elif node.op_tok.type == TT_BOREQ:
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.bored_by(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.bored_by(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
         elif node.op_tok.type == TT_BXOREQ:
-            if not isinstance(node.left_node, VarAccessNode):
-                return res.failure(RTError(
-                    node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
-                    context
-                ))
-
-            var_name = node.left_node.var_name_tok.value
-
-            old_value = res.register(self.visit(node.left_node, context))
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.bxored_by(y)))
             if res.error: return res
-            
-            value = res.register(self.visit(node.right_node, context))
-            # print(value)
-            if res.error: return res
-            
-            result, error = old_value.bxored_by(value)
-            if error: return res.failure(error)
-
-            old_value.context.symbol_table.object.set(var_name, result)
             return res.success(result)
-
+            
         if error: return res.failure(error)
         return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
             
@@ -2283,16 +2342,18 @@ class Interpreter:
 
 
         while True:
+            new_context_2 = Context('for loop', new_context, node.body_node.pos_start)
+            new_context_2.symbol_table = SymbolTable(Object(new_context_2.parent.symbol_table.object))
+
             statement2 = res.register(self.visit(node.statement2_node, new_context))
             if res.error: return res
 
             statement3 = res.register(self.visit(node.statement3_node, new_context))
             if res.error: return res
-            
 
             if not statement2.is_true(): break
 
-            body = res.register(self.visit(node.body_node, new_context))
+            body = res.register(self.visit(node.body_node, new_context_2))
             if res.error: return res
         
         return res.success(
@@ -2325,7 +2386,7 @@ class Interpreter:
         arg_names = [arg_name.value for arg_name in node.arg_name_toks]
 
         def func(args):
-            new_context = Context(func_name, context, node.pos_start)
+            new_context = Context(func_name, context, node.pos_start, True)
             new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
 
             for i in range(len(arg_names)):
@@ -2418,6 +2479,8 @@ global_symbol_table.object.set('Null', null_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
+global_symbol_table.object.set('String', string_object)
+global_symbol_table.object.set('List', list_object)
 global_symbol_table.object.set('Function', function_object)
 
 def runstring(text, fn='<anonymous>'):
@@ -2433,7 +2496,7 @@ def runstring(text, fn='<anonymous>'):
 
     # Run program
     interpreter = Interpreter()
-    context = Context('<program>')
+    context = Context('<program>', should_display=True)
     context.symbol_table = global_symbol_table
     result = interpreter.visit(ast.node, context)
     if result.error: return None, result.error
@@ -2445,5 +2508,3 @@ def run(fn):
     result, error = runstring(f.read(), fn)
     if error: print(error)
     return result, error
-
-
