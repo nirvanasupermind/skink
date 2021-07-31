@@ -8,6 +8,7 @@ import numpy as np
 import uuid
 import string
 import sys
+import time
 
 #######################################
 # CONSTANTS
@@ -149,7 +150,7 @@ TT_BXOREQ   = 'BXOREQ'
 TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 KEYWORDS = [
-    'null',
+    'nil',
     'true',
     'false',
     'var',
@@ -493,7 +494,7 @@ class EmptyNode:
         self.pos_start = pos_start
         self.pos_end = pos_end
 
-class NullNode:
+class NilNode:
     def __init__(self, tok):
         self.tok = tok
         self.pos_start = tok.pos_start
@@ -770,10 +771,10 @@ class Parser:
             if res.error: return res
             return res.success(UnaryOpNode(tok, factor))
         
-        elif tok.matches(TT_KEYWORD, 'null'):
+        elif tok.matches(TT_KEYWORD, 'nil'):
             res.register_advancement()
             self.advance()
-            return res.success(NullNode(tok))
+            return res.success(NilNode(tok))
 
         elif tok.type in (TT_INT, TT_FLOAT):
             res.register_advancement()
@@ -1557,7 +1558,7 @@ class Object:
     def bnotted(self):
         return None, self.illegal_operation()
 
-    def execute(self, args):
+    def execute(self, args, context, pos_start, pos_end):
         return None, self.illegal_operation()
 
     def is_true(self):
@@ -1600,21 +1601,21 @@ class Object:
         result += f'{key}: {value_str}}}' 
         return result
 
-class Null(Object):
+class Nil(Object):
     def __init__(self):
-        super().__init__(null_object)
+        super().__init__(nil_object)
     
     def get_comparison_eq(self, other):
-        return Bool(isinstance(other, Null)), None
+        return Bool(isinstance(other, Nil)), None
 
     def get_comparison_ne(self, other):
-        return Bool(not isinstance(other, Null)), None
+        return Bool(not isinstance(other, Nil)), None
 
     def is_true(self):
         return False
         
     def __repr__(self):
-        return 'null'
+        return 'nil'
         
 class Int(Object): 
     def __init__(self, value):
@@ -1928,8 +1929,8 @@ class Function(Object):
         self.name = name or '<anonymous>'
         self.func = func
      
-    def execute(self, args):
-        return self.func(args)
+    def execute(self, args, context, pos_start, pos_end):
+        return self.func(args, context, pos_start, pos_end)
   
     def __repr__(self):
         return f'<function {self.name}>'
@@ -1938,7 +1939,7 @@ class Function(Object):
 # OBJECTS
 #######################################
 object_object = Object()
-null_object = Object(object_object)
+nil_object = Object(object_object)
 int_object = Object(object_object)
 float_object = Object(object_object)
 bool_object = Object(object_object)
@@ -1978,9 +1979,9 @@ class Interpreter:
     def no_visit_method(self, node, context):
         raise Exception(f'No visit_{type(node).__name__} method found')
 
-    def visit_NullNode(self, node, context):
+    def visit_NilNode(self, node, context):
         return RTResult().success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
     def visit_NumberNode(self, node, context):
@@ -2062,7 +2063,7 @@ class Interpreter:
         result = obj.get(prop)
         if result == None:
             return res.success(
-                Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+                Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
             )
         else:
             return res.success(result)
@@ -2078,7 +2079,7 @@ class Interpreter:
         result = obj.get(prop)
         if result == None:
             return res.success(
-                Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+                Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
             )
         else:
             return res.success(result)
@@ -2094,7 +2095,7 @@ class Interpreter:
             # print(res.value)
             if res.func_return_value: 
                 return res.success(
-                    Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+                    Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
                 )
             
             lines.append(line)
@@ -2308,7 +2309,7 @@ class Interpreter:
 
             return res.success(if_case)
         else:
-            return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
+            return res.success(Nil().set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_IfElseNode(self, node, context): 
         if_context = Context('if statement', context, node.pos_start)
@@ -2357,7 +2358,7 @@ class Interpreter:
             if res.error: return res
         
         return res.success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
     
     def visit_WhileNode(self, node, context):
@@ -2376,7 +2377,7 @@ class Interpreter:
             if res.error: return res
 
         return res.success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
     def visit_FuncDefNode(self, node, context):
@@ -2385,23 +2386,23 @@ class Interpreter:
         body_node = node.body_node
         arg_names = [arg_name.value for arg_name in node.arg_name_toks]
 
-        def func(args):
-            new_context = Context(func_name, context, node.pos_start, True)
-            new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+        def execute(args, context, pos_start, pos_end):
+            # new_context = Context(func_name, context, node.pos_start, True)
+            # new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
 
             for i in range(len(arg_names)):
                 arg_name = arg_names[i]
-                arg_value = args[i] if i < len(args) else Null().set_pos(node.pos_start, node.pos_end)
-                arg_value.set_context(new_context)
-                new_context.symbol_table.object.set(arg_name, arg_value)
+                arg_value = args[i] if i < len(args) else Nil().set_pos(node.pos_start, node.pos_end)
+                arg_value.set_context(context)
+                context.symbol_table.object.set(arg_name, arg_value)
             
-            tmp = self.visit(body_node, new_context)
+            tmp = self.visit(body_node, context)
             func_return_value, error = tmp.func_return_value, tmp.error
             if error: return None, error
 
-            return func_return_value or Null().set_context(new_context).set_pos(node.pos_start, node.pos_end), None
+            return func_return_value or Nil().set_context(context).set_pos(node.pos_start, node.pos_end), None
         
-        func_value = Function(func_name, func).set_context(context).set_pos(node.pos_start, node.pos_end)
+        func_value = Function(func_name, execute).set_context(context).set_pos(node.pos_start, node.pos_end)
         
         if node.var_name_tok:
             old_value = context.symbol_table.object.slots.get(func_name, None)
@@ -2425,11 +2426,14 @@ class Interpreter:
         if res.error: return res
         value_to_call = value_to_call.set_pos(node.pos_start, node.pos_end)
 
+        new_context = Context(value_to_call.name if hasattr(value_to_call, 'name') else '<anonymous>', context, node.pos_start, True)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+
         for arg_node in node.arg_nodes:
             args.append(res.register(self.visit(arg_node, context)))
             if res.error: return res
 
-        return_value, error = value_to_call.execute(args)
+        return_value, error = value_to_call.execute(args, context, node.pos_start, node.pos_end)
         # print(return_value)
         if error: return res.failure(error)
         # print(f'{value_to_call.name} {args} {return_value}')
@@ -2442,7 +2446,7 @@ class Interpreter:
         if res.error: return res
 
         return res.success_return(expr).success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )      
 
 #######################################
@@ -2453,29 +2457,77 @@ DEPTH_DECR_CLASSES = (List, Object)
 global_symbol_table = SymbolTable(Object(object_object))
 global_symbol_table.object.set('global', global_symbol_table.object)
 
-def normalize_args(args, num_args):
+def normalize_args(args, num_args, context, pos_start, pos_end):
     new_args = []
     for i in range(0, num_args):
-        arg_value = args[i] if i < len(args) else Null()
+        arg_value = args[i] if i < len(args) else Nil().set_context(context).set_pos(pos_start, pos_end)
         new_args.append(arg_value)
     
     return new_args
 
-def print_func(args):
-    args = normalize_args(args, 1)
+# def currentTimeMillis_func(args):
+#     args = normalize_args(args, 0)
+#     return Int(time.time_ns() // 1000000), None
+
+def execute_abs(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a number',
+            context
+        )
+
+    result = np.abs(args[0].value)
+    return Int(result) if isinstance(result, np.int64) else Float(result), None
+
+def execute_acos(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is a not a number',
+            context
+        )
+
+    result = np.arccos(args[0].value)
+    return Int(result) if isinstance(result, np.int64) else Float(result), None
+
+def execute_asin(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is a not a number',
+            context
+        )
+
+    result = np.arcsin(args[0].value)
+    return Int(result) if isinstance(result, np.int64) else Float(result), None
+
+
+def execute_print(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
     sys.stdout.write(args[0])
-    return Null(), None
+    return Nil(), None
 
-def println_func(args):
-    args = normalize_args(args, 1)
+def execute_println(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
     print(args[0])
-    return Null(), None
+    return Nil(), None
 
-global_symbol_table.object.set('print', Function('print', print_func))
-global_symbol_table.object.set('println', Function('println', println_func))
+math_object = Object()
+math_object.set('abs', Function('abs', execute_abs))
+math_object.set('acos', Function('acos', execute_acos))
+math_object.set('asin', Function('asin', execute_asin))
+
+global_symbol_table.object.set('math', math_object)
+
+global_symbol_table.object.set('print', Function('print', execute_print))
+global_symbol_table.object.set('println', Function('println', execute_println))
 
 global_symbol_table.object.set('Object', object_object)
-global_symbol_table.object.set('Null', null_object)
+global_symbol_table.object.set('Nil', nil_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
