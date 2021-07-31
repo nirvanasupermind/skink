@@ -2469,7 +2469,7 @@ def normalize_args(args, num_args, context, pos_start, pos_end):
 #     args = normalize_args(args, 0)
 #     return Int(time.time_ns() // 1000000), None
 
-def execute_abs(args, context, pos_start, pos_end):
+def execute_math_abs(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
     if not isinstance(args[0], (Int, Float)):
         return None, RTError(
@@ -2481,7 +2481,7 @@ def execute_abs(args, context, pos_start, pos_end):
     result = np.abs(args[0].value)
     return Int(result) if isinstance(result, np.int64) else Float(result), None
 
-def execute_acos(args, context, pos_start, pos_end):
+def execute_math_acos(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
     if not isinstance(args[0], (Int, Float)):
         return None, RTError(
@@ -2493,7 +2493,7 @@ def execute_acos(args, context, pos_start, pos_end):
     result = np.arccos(args[0].value)
     return Int(result) if isinstance(result, np.int64) else Float(result), None
 
-def execute_asin(args, context, pos_start, pos_end):
+def execute_math_asin(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
     if not isinstance(args[0], (Int, Float)):
         return None, RTError(
@@ -2505,7 +2505,6 @@ def execute_asin(args, context, pos_start, pos_end):
     result = np.arcsin(args[0].value)
     return Int(result) if isinstance(result, np.int64) else Float(result), None
 
-
 def execute_print(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
     sys.stdout.write(args[0])
@@ -2516,10 +2515,46 @@ def execute_println(args, context, pos_start, pos_end):
     print(args[0])
     return Nil(), None
 
+def execute_object_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return Object(object_object), None
+    
+def execute_nil_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return Nil(), None
+
+def execute_int_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return Int(0), None
+
+def execute_float_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return Float(0.0), None
+
+def execute_bool_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return Bool(False), None
+
+def execute_string_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return String(''), None
+
+def execute_list_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return List([]), None
+
+def execute_function_new(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    return Function(
+        '<anonymous>',
+        lambda args, context, pos_start, pos_end: (Nil(), None)
+    ), None
+
+
 math_object = Object()
-math_object.set('abs', Function('abs', execute_abs))
-math_object.set('acos', Function('acos', execute_acos))
-math_object.set('asin', Function('asin', execute_asin))
+math_object.set('abs', Function('abs', execute_math_abs))
+math_object.set('acos', Function('acos', execute_math_acos))
+math_object.set('asin', Function('asin', execute_math_asin))
 
 global_symbol_table.object.set('math', math_object)
 
@@ -2534,6 +2569,15 @@ global_symbol_table.object.set('Bool', bool_object)
 global_symbol_table.object.set('String', string_object)
 global_symbol_table.object.set('List', list_object)
 global_symbol_table.object.set('Function', function_object)
+
+object_object.set('new', Function('new', execute_object_new))
+nil_object.set('new', Function('new', execute_nil_new))
+int_object.set('new', Function('new', execute_int_new))
+float_object.set('new', Function('new', execute_float_new))
+bool_object.set('new', Function('new', execute_bool_new))
+string_object.set('new', Function('new', execute_string_new))
+list_object.set('new', Function('new', execute_list_new))
+function_object.set('new', Function('new', execute_function_new))
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
