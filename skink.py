@@ -2507,7 +2507,7 @@ def execute_math_asin(args, context, pos_start, pos_end):
 
 def execute_print(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
-    sys.stdout.write(args[0])
+    sys.stdout.write(repr(args[0]))
     return Nil(), None
 
 def execute_println(args, context, pos_start, pos_end):
