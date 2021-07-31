@@ -1,0 +1,6 @@
+(func () {
+    var local = "local";
+    (func () {
+        println(local); //expect: local
+    })();
+})();

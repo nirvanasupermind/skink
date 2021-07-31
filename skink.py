@@ -1980,7 +1980,7 @@ class Interpreter:
             if not isinstance(node.left_node, VarAccessNode):
                 return res.failure(RTError(
                     node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
+                    'invalid left-hand side in assignment',
                     context
                 ))
 
@@ -2023,7 +2023,7 @@ class Interpreter:
             if not isinstance(node.left_node, VarAccessNode):
                 return res.failure(RTError(
                     node.left_node.pos_start, node.left_node.pos_end,
-                    'Invalid left-hand side in assignment',
+                    'invalid left-hand side in assignment',
                     context
                 ))
 
