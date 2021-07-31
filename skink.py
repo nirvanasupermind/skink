@@ -1510,10 +1510,7 @@ class Object:
             key = keys[i]
             value = values[i]
 
-            use_depth_decr = (
-                Object, 
-                List
-            ) 
+            use_depth_decr = type(value) in DEPTH_DECR_CLASSES
 
             value_str = value.__repr__(depth_decr - 1) if use_depth_decr else str(value)
 
@@ -1846,7 +1843,7 @@ class List(Object):
 
     def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
         if depth_decr < 0: return '[...]'
-        t1 = ', '.join([el.__repr__(depth_decr-1) if type(el) in (List, Object) else str(el) for el in self.to_python_list()])
+        t1 = ', '.join([el.__repr__(depth_decr-1) if type(el) in DEPTH_DECR_CLASSES else str(el) for el in self.to_python_list()])
         return f'[{t1}]'
 
 class Function(Object):
@@ -2390,6 +2387,8 @@ class Interpreter:
 #######################################
 # RUN
 #######################################
+DEPTH_DECR_CLASSES = (List, Object) 
+
 global_symbol_table = SymbolTable(Object(object_object))
 global_symbol_table.object.set('global', global_symbol_table.object)
 
@@ -2420,7 +2419,6 @@ global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
 global_symbol_table.object.set('Function', function_object)
-
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
