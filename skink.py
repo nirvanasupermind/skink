@@ -7,6 +7,7 @@
 import numpy as np 
 import uuid
 import string
+import sys
 
 #######################################
 # CONSTANTS
@@ -777,6 +778,12 @@ class Parser:
             if res.error: return res
             return res.success(func_def)
 
+        elif self.current_tok.type == TT_LSQUARE:
+            list_expr = res.register(self.list_expr())
+            if res.error: return res
+            return res.success(list_expr)
+
+
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
             self.current_tok.get_error_message()
@@ -897,11 +904,6 @@ class Parser:
             return_expr = res.register(self.return_expr())
             if res.error: return res
             return res.success(return_expr)
-        elif self.current_tok.type == TT_LSQUARE:
-            return_expr = res.register(self.list_expr())
-            if res.error: return res
-            return res.success(return_expr)
-
         return self.assignment_expr()
 
     def var_declare_expr(self):
@@ -1508,8 +1510,9 @@ class Object:
             key = keys[i]
             value = values[i]
 
-            use_depth_decr = type(value) in (
+            use_depth_decr = (
                 Object, 
+                List
             ) 
 
             value_str = value.__repr__(depth_decr - 1) if use_depth_decr else str(value)
@@ -1821,6 +1824,31 @@ class String(Object):
     def __repr__(self): 
         return self.value
 
+class List(Object):
+    def __init__(self, elements):
+        super().__init__(list_object)
+        for i in range(0, len(elements)):
+            self.set(i, elements[i])
+
+    def to_python_list(self):
+        t1 = list(self.slots.keys())
+        t2 = list(filter(lambda el: el.isnumeric(), t1))
+        return [self.slots[el] for el in t2]
+
+    def added_to(self, other):
+        if isinstance(other, List): 
+            return List(self.to_python_list() + other.to_python_list()), None
+        else:
+            return None, self.illegal_operation(other)
+    
+    def copy(self):
+        return List(self.to_python_list()[:])
+
+    def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
+        if depth_decr < 0: return '[...]'
+        t1 = ', '.join([el.__repr__(depth_decr-1) if type(el) in (List, Object) else str(el) for el in self.to_python_list()])
+        return f'[{t1}]'
+
 class Function(Object):
     def __init__(self, name, func):
         super().__init__(function_object)
@@ -1842,6 +1870,7 @@ int_object = Object(object_object)
 float_object = Object(object_object)
 bool_object = Object(object_object)
 string_object = Object(object_object)
+list_object = Object(object_object)
 function_object = Object(object_object)
 
 #######################################
@@ -1901,6 +1930,19 @@ class Interpreter:
         return RTResult().success(
             String(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
         )
+
+    def visit_ListNode(self, node, context):
+        res = RTResult()
+        elements = []
+
+        for element_node in node.element_nodes:
+            elements.append(res.register(self.visit(element_node, context)))
+            if res.error: return res
+
+        return res.success(
+            List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+
 
     def visit_VarAccessNode(self, node, context):
         res = RTResult()
@@ -2361,12 +2403,11 @@ def normalize_args(args, num_args):
 
 def print_func(args):
     args = normalize_args(args, 1)
-    print(args[0], end='')
+    sys.stdout.write(args[0])
     return Null(), None
 
 def println_func(args):
     args = normalize_args(args, 1)
-
     print(args[0])
     return Null(), None
 
@@ -2403,4 +2444,8 @@ def runstring(text, fn='<anonymous>'):
 
 def run(fn):
     f = open(fn, 'r')
-    return runstring(f.read(), fn)
+    result, error = runstring(f.read(), fn)
+    if error: print(error)
+    return result, error
+
+
