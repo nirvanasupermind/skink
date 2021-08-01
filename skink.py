@@ -133,6 +133,7 @@ TT_LCURLY   = 'LCURLY'
 TT_RCURLY   = 'RCURLY'
 TT_DOT      = 'DOT'
 TT_COMMA    = 'COMMA'
+TT_COLON    = 'COLON'
 TT_EE       = 'EE'
 TT_NE       = 'NE'
 TT_LT       = 'LT'
@@ -259,6 +260,9 @@ class Lexer:
                 self.advance()
             elif self.current_char == ',':
                 tokens.append(Token(TT_COMMA, pos_start=self.pos.copy()))
+                self.advance()
+            elif self.current_char == ':':
+                tokens.append(Token(TT_COLON, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '!':
                 tokens.append(self.make_not_equals())
@@ -566,6 +570,21 @@ class ListNode:
         self.pos_start = pos_start
         self.pos_end = pos_end
 
+class SlotNode:
+	def __init__(self, key_node, value_node):
+		self.key_node = key_node
+		self.value_node = value_node
+
+		self.pos_start = self.key_node.pos_start
+		self.pos_end = self.value_node.pos_end
+
+class ObjectNode:
+    def __init__(self, slot_nodes, pos_start, pos_end):
+        self.slot_nodes = slot_nodes
+
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
         self.left_node = left_node
@@ -828,6 +847,11 @@ class Parser:
             if res.error: return res
             return res.success(list_expr)
 
+
+        elif self.current_tok.type == TT_LCURLY:
+            object_expr = res.register(self.object_expr())
+            if res.error: return res
+            return res.success(object_expr)
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
@@ -1354,6 +1378,77 @@ class Parser:
 
         return res.success(ListNode(
             element_nodes,
+            pos_start,
+            self.current_tok.pos_end.copy()
+        ))
+
+    def slot(self):
+        res = ParseResult()
+        key_node = res.register(self.expr())
+        if res.error: return res
+        # res.register_advancement()
+        # self.advance()
+
+        if self.current_tok.type != TT_COLON:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                self.current_tok.get_error_message()
+            ))
+    
+        res.register_advancement()
+        self.advance()
+        value_node = res.register(self.expr())
+        if res.error: return res
+
+        return res.success(SlotNode(key_node, value_node))
+
+
+
+        
+    def object_expr(self):
+        res = ParseResult()
+        slot_nodes = []
+        pos_start = self.current_tok.pos_start.copy()
+
+        if self.current_tok.type != TT_LCURLY:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                self.current_tok.get_error_message()
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_RCURLY:
+            res.register_advancement()
+            self.advance()
+        else:
+            slot_nodes.append(res.register(self.slot()))
+            if res.error:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    self.current_tok.get_error_message()
+                ))
+
+            
+            while self.current_tok.type == TT_COMMA:
+                res.register_advancement()
+                self.advance()
+
+                slot_nodes.append(res.register(self.slot()))
+                if res.error: return res
+            
+            if self.current_tok.type != TT_RCURLY:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    self.current_tok.get_error_message()
+                ))
+
+            res.register_advancement()
+            self.advance()
+
+        return res.success(ObjectNode(
+            slot_nodes,
             pos_start,
             self.current_tok.pos_end.copy()
         ))
@@ -2032,6 +2127,22 @@ class Interpreter:
             List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
+    def visit_ObjectNode(self, node, context):
+        res = RTResult()
+        result = Object(object_object)
+
+        for slot_node in node.slot_nodes:
+            key = res.register(self.visit(slot_node.key_node, context))
+            if res.error: return res
+
+            value = res.register(self.visit(slot_node.value_node, context))
+            if res.error: return res
+
+            result.set(repr(key), value)
+
+        return res.success(
+            result.set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
     def visit_VarAccessNode(self, node, context):
         res = RTResult()
@@ -3329,9 +3440,9 @@ list_object.set('subList', Function('subList', execute_list_subList, True))
 list_object.set('transform', Function('transform', execute_list_transform, True))
 
 function_object.set('new', Function('new', execute_function_new))
-function_object.set('getName', Function('get_name', execute_function_getName, True))
+function_object.set('getName', Function('getName', execute_function_getName, True))
 
-def runstring(text, fn='<anonymous>'):
+def simple_run(text, fn='<anonymous>'):
     # Generate tokens
     lexer = Lexer(fn, text)
     tokens, error = lexer.make_tokens()
@@ -3351,8 +3462,11 @@ def runstring(text, fn='<anonymous>'):
 
     return result.value, None
 
+def runstring(text):
+    return simple_run(text, '<anonymous>')
+
 def run(fn):
     f = open(fn, 'r')
-    result, error = runstring(f.read(), fn)
-    if error: print(error)
+    result, error = simple_run(f.read(), fn)
+    if error: print(error.as_string())
     return result, error
