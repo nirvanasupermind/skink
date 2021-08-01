@@ -9,6 +9,7 @@ import uuid
 import string
 import sys
 import time
+import math
 
 #######################################
 # CONSTANTS
@@ -22,6 +23,12 @@ DEFAULT_MAX_DEPTH = 6
 #######################################
 # UTILITY FUNCTIONS
 #######################################
+def isPrototypeOf(a, b):
+    while b:
+        b = b.prototype
+        if b and a.uuid == b.uuid: return True
+    
+    return False
 
 #######################################
 # ERRORS
@@ -767,9 +774,9 @@ class Parser:
         if tok.type in (TT_PLUS, TT_MINUS, TT_NOT, TT_BNOT):
             res.register_advancement()
             self.advance()
-            factor = res.register(self.factor())
+            call = res.register(self.call())
             if res.error: return res
-            return res.success(UnaryOpNode(tok, factor))
+            return res.success(UnaryOpNode(tok, call))
         
         elif tok.matches(TT_KEYWORD, 'nil'):
             res.register_advancement()
@@ -1895,6 +1902,9 @@ class String(Object):
         else:
             return Bool(False).set_context(self.context), None
 
+    def is_true(self):
+        return len(self.value) != 0
+
     def __repr__(self): 
         return self.value
 
@@ -1918,16 +1928,20 @@ class List(Object):
     def copy(self):
         return List(self.to_python_list()[:])
 
+    # def is_true(self):
+    #     return len(self.to_python_list()) != 0
+       
     def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
         if depth_decr < 0: return '[...]'
         t1 = ', '.join([el.__repr__(depth_decr-1) if type(el) in DEPTH_DECR_CLASSES else str(el) for el in self.to_python_list()])
         return f'[{t1}]'
 
 class Function(Object):
-    def __init__(self, name, func):
+    def __init__(self, name, func, is_member_function=False):
         super().__init__(function_object)
         self.name = name or '<anonymous>'
         self.func = func
+        self.is_member_function = is_member_function
      
     def execute(self, args, context, pos_start, pos_end):
         return self.func(args, context, pos_start, pos_end)
@@ -2387,20 +2401,18 @@ class Interpreter:
         arg_names = [arg_name.value for arg_name in node.arg_name_toks]
 
         def execute(args, context, pos_start, pos_end):
-            # new_context = Context(func_name, context, node.pos_start, True)
-            # new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
-
             for i in range(len(arg_names)):
                 arg_name = arg_names[i]
-                arg_value = args[i] if i < len(args) else Nil().set_pos(node.pos_start, node.pos_end)
+                arg_value = args[i] if i < len(args) else Nil().set_pos(pos_start, pos_end)
                 arg_value.set_context(context)
                 context.symbol_table.object.set(arg_name, arg_value)
-            
+
+            context.symbol_table.object.set('argv', List(args))
             tmp = self.visit(body_node, context)
             func_return_value, error = tmp.func_return_value, tmp.error
             if error: return None, error
 
-            return func_return_value or Nil().set_context(context).set_pos(node.pos_start, node.pos_end), None
+            return func_return_value or Nil().set_context(context).set_pos(pos_start, pos_end), None
         
         func_value = Function(func_name, execute).set_context(context).set_pos(node.pos_start, node.pos_end)
         
@@ -2433,7 +2445,17 @@ class Interpreter:
             args.append(res.register(self.visit(arg_node, context)))
             if res.error: return res
 
-        return_value, error = value_to_call.execute(args, context, node.pos_start, node.pos_end)
+        if isinstance(value_to_call, Function) and value_to_call.is_member_function and isinstance(node.node_to_call, (DotNotationNode, BracketNotationNode)):
+            obj = res.register(self.visit(node.node_to_call.obj_node, context))
+            if res.error: return res
+
+            return_value, error = value_to_call.execute(
+                [obj] + args,
+                context, node.pos_start, node.pos_end
+            )
+
+        else:
+            return_value, error = value_to_call.execute(args, context, node.pos_start, node.pos_end)
         # print(return_value)
         if error: return res.failure(error)
         # print(f'{value_to_call.name} {args} {return_value}')
@@ -2469,7 +2491,7 @@ def normalize_args(args, num_args, context, pos_start, pos_end):
 #     args = normalize_args(args, 0)
 #     return Int(time.time_ns() // 1000000), None
 
-def execute_math_abs(args, context, pos_start, pos_end):
+def execute_numpy_ufunc(ufunc, args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
     if not isinstance(args[0], (Int, Float)):
         return None, RTError(
@@ -2478,11 +2500,41 @@ def execute_math_abs(args, context, pos_start, pos_end):
             context
         )
 
-    result = np.abs(args[0].value)
+    result = ufunc(args[0].value)
     return Int(result) if isinstance(result, np.int64) else Float(result), None
 
-def execute_math_acos(args, context, pos_start, pos_end):
-    args = normalize_args(args, 1, context, pos_start, pos_end)
+def execute_abs(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.abs,
+        args, context, pos_start, pos_end
+    )
+
+def execute_acos(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.acos,
+        args, context, pos_start, pos_end
+    )
+
+def execute_acos(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.acos,
+        args, context, pos_start, pos_end
+    )
+
+def execute_asin(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.asin,
+        args, context, pos_start, pos_end
+    )
+    
+def execute_atan(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.atan,
+        args, context, pos_start, pos_end
+    )
+
+def execute_atan2(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
     if not isinstance(args[0], (Int, Float)):
         return None, RTError(
             args[0].pos_start, args[0].pos_end,
@@ -2490,11 +2542,48 @@ def execute_math_acos(args, context, pos_start, pos_end):
             context
         )
 
-    result = np.arccos(args[0].value)
+    if not isinstance(args[1], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[1]} is a not a number',
+            context
+        )
+
+    result = np.arctan2(args[0].value, args[1].value)
     return Int(result) if isinstance(result, np.int64) else Float(result), None
 
-def execute_math_asin(args, context, pos_start, pos_end):
-    args = normalize_args(args, 1, context, pos_start, pos_end)
+def execute_ceil(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.ceil,
+        args, context, pos_start, pos_end
+    )
+
+def execute_cos(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.cos,
+        args, context, pos_start, pos_end
+    )
+
+def execute_exp(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.exp,
+        args, context, pos_start, pos_end
+    )
+
+def execute_floor(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.floor,
+        args, context, pos_start, pos_end
+    )
+
+def execute_log(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.log,
+        args, context, pos_start, pos_end
+    )
+
+def execute_max(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
     if not isinstance(args[0], (Int, Float)):
         return None, RTError(
             args[0].pos_start, args[0].pos_end,
@@ -2502,7 +2591,53 @@ def execute_math_asin(args, context, pos_start, pos_end):
             context
         )
 
-    result = np.arcsin(args[0].value)
+    if not isinstance(args[1], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[1]} is a not a number',
+            context
+        )
+
+    result = np.max(np.array([args[0].value, args[1].value]))
+    return Int(result) if isinstance(result, np.int64) else Float(result), None
+
+def execute_min(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is a not a number',
+            context
+        )
+
+    if not isinstance(args[1], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[1]} is a not a number',
+            context
+        )
+
+    result = np.min(np.array([args[0].value, args[1].value]))
+    return Int(result) if isinstance(result, np.int64) else Float(result), None
+
+
+def execute_pow(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is a not a number',
+            context
+        )
+
+    if not isinstance(args[1], (Int, Float)):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[1]} is a not a number',
+            context
+        )
+
+    result = np.power(args[0].value, args[1].value)
     return Int(result) if isinstance(result, np.int64) else Float(result), None
 
 def execute_print(args, context, pos_start, pos_end):
@@ -2512,37 +2647,621 @@ def execute_print(args, context, pos_start, pos_end):
 
 def execute_println(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
-    print(args[0])
     return Nil(), None
+
+def execute_random(args, context, pos_start, pos_end):
+    args = normalize_args(args, 0, context, pos_start, pos_end)
+    result = np.random.rand()
+    return Int(result) if isinstance(result, np.int64) else Float(result), None
+
+def execute_round(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        lambda x: np.floor(x + 0.5),
+        args, context, pos_start, pos_end
+    )
+
+def execute_sin(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.sin,
+        args, context, pos_start, pos_end
+    )
+
+def execute_sqrt(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.sqrt,
+        args, context, pos_start, pos_end
+    )
+
+def execute_tan(args, context, pos_start, pos_end):
+    return execute_numpy_ufunc(
+        np.tan,
+        args, context, pos_start, pos_end
+    )
+
 
 def execute_object_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return Object(object_object), None
+
+def execute_object_getPrototype(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    result = args[0].prototype
+    if result == None:
+        return Nil(), None
+
+    return args[0].prototype, None
+
+def execute_object_hashCode(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    return Int(hash(args[0].uuid)), None
+
+def execute_object_setPrototype(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if (not isPrototypeOf(args[0], args[1])) and args[0].uuid != args[1].uuid:
+        args[0].prototype = args[1]
+    else:
+        return None, RTError(
+            pos_start, pos_end,
+            'cyclic prototype',
+            context
+        )
     
+    return args[0], None
+
+def execute_object_toBool(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)    
+    return Bool(args[0].is_true()), None
+
+def execute_object_toString(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)    
+    return String(repr(args[0])), None
+
 def execute_nil_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return Nil(), None
+
 
 def execute_int_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return Int(0), None
 
+def execute_int_toInt(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], Int):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not an integer',
+            context
+        )
+
+    return args[0], None
+
+def execute_int_toFloat(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], Int):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not an integer',
+            context
+        )
+
+    return Float(float(args[0].value)), None
+
 def execute_float_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return Float(0.0), None
+
+def execute_float_toInt(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], Float):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a float',
+            context
+        )
+
+    return Int(np.int64(args[0].value)), None
+
+def execute_float_toFloat(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], Float):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a float',
+            context
+        )
+
+    return args[0], None
+
 
 def execute_bool_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return Bool(False), None
 
+
 def execute_string_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return String(''), None
+
+def execute_string_charAt(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+        
+    if not isinstance(args[1], Int):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not an integer',
+            context
+        )
+    
+    result = args[0].value[args[1].value] if args[1].value < len(args[0].value) else ''
+    return String(result), None
+
+def execute_string_compareTo(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+        
+        
+    result = -1 if args[0].value < args[1].value else (0 if args[0].value == args[1].value else 1)
+    return Int(result), None
+
+def execute_string_concat(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+        
+    return args[0].added_to(args[1])
+
+def execute_string_endsWith(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+        
+    return Bool(args[0].value.endswith(args[1].value)), None
+
+def execute_string_indexOf(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+        
+    try:
+        return Int(args[0].value.index(args[1].value)), None
+    except(ValueError):
+        return Int(-1), None
+
+def execute_string_lastIndexOf(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+        
+    try:
+        return Int(args[0].value.rindex(args[1].value)), None
+    except(ValueError):
+        return Int(-1), None
+
+def execute_string_length(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    return Int(len(args[0].value)), None
+
+def execute_string_replace(args, context, pos_start, pos_end):
+    args = normalize_args(args, 3, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+    
+    if not isinstance(args[2], String):
+        return None, RTError(
+            args[2].pos_start, args[2].pos_end,
+            f'{args[2]} is not a string',
+            context
+        )
+
+    return String(args[0].value.replace(args[1].value, args[2].value)), None
+
+def execute_string_startsWith(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], String):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a string',
+            context
+        )
+    
+    return Bool(args[0].value.startswith(args[1].value)), None
+
+def execute_string_substring(args, context, pos_start, pos_end):
+    args = normalize_args(args, 3, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    if not isinstance(args[1], Int):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not an integer',
+            context
+        )
+    
+    if isinstance(args[2], Nil):
+        return String(args[0].value[args[1].value:]), None
+    else:
+        if not isinstance(args[2], Int):
+            return None, RTError(
+                args[2].pos_start, args[2].pos_end,
+                f'{args[2]} is not an integer',
+                context
+            )
+        
+        return String(args[0].value[args[1].value:args[2].value]), None
+
+def execute_string_toCharList(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    return List(list(args[0].value)), None
+
+def execute_string_toFloat(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    try:
+        return Float(float(args[0].value)), None
+    except:
+        return None, RTError(
+            pos_start, pos_end,
+            f'could not convert {args[0]} to a float',
+            context
+        )
+
+def execute_string_toInt(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    try:
+        return Int(int(args[0].value)), None
+    except:
+        return None, RTError(
+            pos_start, pos_end,
+            f'could not convert {args[0]} to an integer',
+            context
+        )
+
+def execute_string_toLowerCase(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    return String(args[0].value.lower()), None
+
+def execute_string_toUpperCase(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+
+    return String(args[0].value.upper()), None
+
 
 def execute_list_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return List([]), None
 
+def execute_list_add(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    args[0].set(repr(len(args[0].to_python_list())), args[1])
+    return Nil(), None
+
+def execute_list_clear(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    for i in range(0, len(args[0].to_python_list())):
+        args[0].remove(repr(i))
+
+    return Nil(), None
+
+def execute_list_concat(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    if not isinstance(args[1], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[1]} is not a list',
+            context
+        )
+
+    return args[0].added_to(args[1]), None
+
+def execute_list_contains(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    for i in range(0, len(args[0].to_python_list())):
+        result, error = args[0].get(repr(i)).get_comparison_eq(args[1])
+        if error: return None, error
+        
+        if result.is_true(): return Bool(True), None
+
+    return Bool(False), None
+
+def execute_list_indexOf(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    for i in range(0, len(args[0].to_python_list())):
+        result, error = args[0].get(repr(i)).get_comparison_eq(args[1])
+        if error: return None, error
+        
+        if result.is_true(): return Int(i), None
+
+    return Int(-1), None
+
+def execute_list_isEmpty(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    return Bool(len(args[0].to_python_list()) == 0), None
+
+def execute_list_lastIndexOf(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    i = len(args[0].to_python_list()) - 1
+    while i >= 0:
+        result, error = args[0].get(repr(i)).get_comparison_eq(args[1])
+        if error: return None, error
+        
+        if result.is_true(): return Int(i), None
+        i -= 1
+
+    return Int(-1), None
+
+def execute_list_length(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+
+    return Int(len(args[0])), None
+
+def execute_list_remove(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+    
+    if not isinstance(args[1], Int):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not an integer',
+            context
+        )
+
+    new_list = List([])
+    idx = 0
+
+    for i in range(0, len(args[0].to_python_list())):
+        if i != args[1].value:
+            new_list.set(repr(idx), args[0].get(repr(i)))
+            idx += 1
+        
+
+    for i in range(0, len(args[0].to_python_list())):
+        args[0].remove(repr(i))
+
+    for i in range(0, len(new_list.to_python_list())):
+        args[0].set(repr(i), new_list.get(repr(i)))
+    
+
+    return Nil(), None
+
+def execute_list_subList(args, context, pos_start, pos_end):
+    args = normalize_args(args, 3, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+    
+    if not isinstance(args[1], Int):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not an integer',
+            context
+        )
+
+    if isinstance(args[2], Nil):
+        return List(args[0].value[args[1].value:]), None
+    else:
+        if not isinstance(args[2], Int):
+            return None, RTError(
+                args[2].pos_start, args[2].pos_end,
+                f'{args[2]} is not an integer',
+                context
+            )
+        
+        return List(args[0].value[args[1].value:args[2].value]), None
+
+def execute_list_transform(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    if not isinstance(args[0], List):
+        return None, RTError(
+            args[0].pos_start, args[0].pos_end,
+            f'{args[0]} is not a list',
+            context
+        )
+    
+    if not isinstance(args[1], Function):
+        return None, RTError(
+            args[1].pos_start, args[1].pos_end,
+            f'{args[1]} is not a function',
+            context
+        )
+
+    new_list = List([])
+    for i in range(0, len(args[0].to_python_list())):
+        result, error = args[1].execute([args[0].get(repr(i))], context, pos_start, pos_end)
+        if error: return None, error
+        new_list.set(repr(i), result)
+        
+    return new_list, None
+
+               
 def execute_function_new(args, context, pos_start, pos_end):
     args = normalize_args(args, 0, context, pos_start, pos_end)
     return Function(
@@ -2550,16 +3269,29 @@ def execute_function_new(args, context, pos_start, pos_end):
         lambda args, context, pos_start, pos_end: (Nil(), None)
     ), None
 
+global_symbol_table.object.set('E', Float(math.e))
+global_symbol_table.object.set('PI', Float(math.pi))
 
-math_object = Object()
-math_object.set('abs', Function('abs', execute_math_abs))
-math_object.set('acos', Function('acos', execute_math_acos))
-math_object.set('asin', Function('asin', execute_math_asin))
-
-global_symbol_table.object.set('math', math_object)
-
+global_symbol_table.object.set('abs', Function('abs', execute_abs))
+global_symbol_table.object.set('acos', Function('acos', execute_acos))
+global_symbol_table.object.set('asin', Function('asin', execute_asin))
+global_symbol_table.object.set('atan', Function('atan', execute_atan))
+global_symbol_table.object.set('atan2', Function('atan2', execute_atan2))
+global_symbol_table.object.set('ceil', Function('ceil', execute_ceil))
+global_symbol_table.object.set('cos', Function('cos', execute_cos))
+global_symbol_table.object.set('exp', Function('exp', execute_exp))
+global_symbol_table.object.set('floor', Function('floor', execute_floor))
+global_symbol_table.object.set('log', Function('log', execute_log))
+global_symbol_table.object.set('max', Function('max', execute_max))
+global_symbol_table.object.set('min', Function('min', execute_min))
+global_symbol_table.object.set('pow', Function('pow', execute_pow))
 global_symbol_table.object.set('print', Function('print', execute_print))
 global_symbol_table.object.set('println', Function('println', execute_println))
+global_symbol_table.object.set('random', Function('random', execute_random))
+global_symbol_table.object.set('round', Function('round', execute_round))
+global_symbol_table.object.set('sin', Function('sin', execute_sin))
+global_symbol_table.object.set('sqrt', Function('sqrt', execute_sqrt))
+global_symbol_table.object.set('tan', Function('tan', execute_tan))
 
 global_symbol_table.object.set('Object', object_object)
 global_symbol_table.object.set('Nil', nil_object)
@@ -2571,12 +3303,58 @@ global_symbol_table.object.set('List', list_object)
 global_symbol_table.object.set('Function', function_object)
 
 object_object.set('new', Function('new', execute_object_new))
+object_object.set('getPrototype', Function('getPrototype', execute_object_getPrototype, True))
+object_object.set('hashCode', Function('hashCode', execute_object_hashCode, True))
+object_object.set('setPrototype', Function('setPrototype', execute_object_setPrototype, True))
+object_object.set('toBool', Function('toBool', execute_object_toBool, True))
+object_object.set('toString', Function('toString', execute_object_toString, True))
+
 nil_object.set('new', Function('new', execute_nil_new))
+
 int_object.set('new', Function('new', execute_int_new))
+int_object.set('MIN_VALUE', Int(-9223372036854775808))
+int_object.set('MAX_VALUE', Int(9223372036854775807))
+int_object.set('toFloat', Function('toFloat', execute_int_toFloat, True))
+int_object.set('toInt', Function('toInt', execute_int_toInt, True))
+
 float_object.set('new', Function('new', execute_float_new))
+float_object.set('MIN_VALUE', Float(sys.float_info.min * sys.float_info.epsilon))
+float_object.set('MAX_VALUE', Float(sys.float_info.max))
+float_object.set('toFloat', Function('toFloat', execute_float_toFloat, True))
+float_object.set('toInt', Function('toInt', execute_float_toInt, True))
+
 bool_object.set('new', Function('new', execute_bool_new))
+
 string_object.set('new', Function('new', execute_string_new))
+string_object.set('charAt', Function('charAt', execute_string_charAt, True))
+string_object.set('compareTo', Function('compareTo', execute_string_compareTo, True))
+string_object.set('concat', Function('concat', execute_string_concat, True))
+string_object.set('endsWith', Function('endsWith', execute_string_endsWith, True))
+string_object.set('indexOf', Function('indexOf', execute_string_indexOf, True))
+string_object.set('lastIndexOf', Function('lastIndexOf', execute_string_indexOf, True))
+string_object.set('length', Function('length', execute_string_length, True))
+string_object.set('replace', Function('replace', execute_string_replace, True))
+string_object.set('startsWith', Function('startsWith', execute_string_startsWith, True))
+string_object.set('substring', Function('substring', execute_string_substring, True))
+string_object.set('toCharList', Function('toCharList', execute_string_toCharList, True))
+string_object.set('toFloat', Function('toFloat', execute_string_toFloat, True))
+string_object.set('toInt', Function('toInt', execute_string_toInt, True))
+string_object.set('toLowerCase', Function('toLowerCase', execute_string_toLowerCase, True))
+string_object.set('toUpperCase', Function('toUpperCase', execute_string_toUpperCase, True))
+
 list_object.set('new', Function('new', execute_list_new))
+list_object.set('add', Function('add', execute_list_add, True))
+list_object.set('clear', Function('clear', execute_list_clear, True))
+list_object.set('concat', Function('concat', execute_list_concat, True))
+list_object.set('contains', Function('contains', execute_list_contains, True))
+list_object.set('indexOf', Function('indexOf', execute_list_indexOf, True))
+list_object.set('isEmpty', Function('isEmpty', execute_list_isEmpty, True))
+list_object.set('lastIndexOf', Function('lastIndexOf', execute_list_lastIndexOf, True))
+list_object.set('length', Function('length', execute_list_length, True))
+list_object.set('remove', Function('remove', execute_list_remove, True))
+list_object.set('subList', Function('subList', execute_list_subList, True))
+list_object.set('transform', Function('transform', execute_list_transform, True))
+
 function_object.set('new', Function('new', execute_function_new))
 
 def runstring(text, fn='<anonymous>'):
