@@ -2516,7 +2516,6 @@ class Interpreter:
                 
                 value = right
 
-                print(old_value.context.symbol_table.object.slots)
                 old_value.context.symbol_table.object.set(var_name, value)
                 return res.success(value)
             elif isinstance(node.left_node, DotNotationNode):
