@@ -5,11 +5,11 @@
 # IMPORTS
 #######################################
 import numpy as np 
+import math
 import uuid
 import string
 import sys
-import time
-import math
+import os
 
 #######################################
 # CONSTANTS
@@ -124,6 +124,7 @@ TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
 TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
+TT_MOD      = 'MOD'
 TT_EQ       = 'EQ'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
@@ -152,6 +153,7 @@ TT_PLUSEQ   = 'PLUSEQ'
 TT_MINUSEQ  = 'MINUSEQ'
 TT_MULEQ    = 'MULEQ'
 TT_DIVEQ    = 'DIVEQ'
+TT_MODEQ    = 'MODEQ'
 TT_BANDEQ   = 'BANDEQ'
 TT_BOREQ    = 'BOREQ'
 TT_BXOREQ   = 'BXOREQ'
@@ -237,6 +239,8 @@ class Lexer:
             elif self.current_char == '/':
                 tok = self.make_div()
                 if tok: tokens.append(tok)
+            elif self.current_char == '%':
+                tokens.append(self.make_mod())
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos.copy()))
                 self.advance()
@@ -407,6 +411,17 @@ class Lexer:
             self.advance()
             tok_type = TT_DIVEQ
 
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
+
+    def make_mod(self):
+        tok_type = TT_MOD
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_MODEQ
 
         return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
@@ -944,7 +959,7 @@ class Parser:
         return res.success(factor)
         
     def term(self):
-        return self.bin_op(self.call, (TT_MUL, TT_DIV))
+        return self.bin_op(self.call, (TT_MUL, TT_DIV, TT_MOD))
 
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -980,6 +995,7 @@ class Parser:
             TT_MINUSEQ, 
             TT_MULEQ,
             TT_DIVEQ,
+            TT_MODEQ,
             TT_BANDEQ,
             TT_BOREQ,
             TT_BXOREQ
@@ -1349,6 +1365,10 @@ class Parser:
         res.register_advancement()
         self.advance()
 
+        while self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+        
         if self.current_tok.type == TT_RSQUARE:
             res.register_advancement()
             self.advance()
@@ -1366,6 +1386,10 @@ class Parser:
 
                 element_nodes.append(res.register(self.expr()))
                 if res.error: return res
+
+            while self.current_tok.type == TT_NEWLINE:
+                res.register_advancement()
+                self.advance()
 
             if self.current_tok.type != TT_RSQUARE:
                 return res.failure(InvalidSyntaxError(
@@ -1416,9 +1440,13 @@ class Parser:
                 self.current_tok.get_error_message()
             ))
 
+        while self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+        
         res.register_advancement()
         self.advance()
-
+        
         if self.current_tok.type == TT_RCURLY:
             res.register_advancement()
             self.advance()
@@ -1438,6 +1466,10 @@ class Parser:
                 slot_nodes.append(res.register(self.slot()))
                 if res.error: return res
             
+            while self.current_tok.type == TT_NEWLINE:
+                res.register_advancement()
+                self.advance()
+    
             if self.current_tok.type != TT_RCURLY:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
@@ -1604,64 +1636,193 @@ class Object:
         del self.slots[name]
 
     def added_to(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('plus') != None and isinstance(self.get('plus'), Function):
+            return self.get('plus').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def subbed_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('minus') != None and isinstance(self.get('minus'), Function):
+            return self.get('minus').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def multed_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('mul') != None and isinstance(self.get('mul'), Function):
+            return self.get('mul').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def dived_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('div') != None and isinstance(self.get('div'), Function):
+            return self.get('div').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
+
+    def modded_by(self, other):
+        if self.get('mod') != None and isinstance(self.get('mod'), Function):
+            return self.get('mod').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def negated(self):
-        return None, self.illegal_operation()
+        if self.get('neg') != None and isinstance(self.get('neg'), Function):
+            return self.get('neg').execute(
+                [self],
+                self.context, self.pos_start, self.pos_end
+            )
+        else:
+            return None, self.illegal_operation()
 
     def get_comparison_eq(self, other):
-        return Bool(self.uuid == other.uuid), None
+        if self.get('eq') != None and isinstance(self.get('eq'), Function):
+            return self.get('eq').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return Bool(self.uuid == other.uuid), None
     
     def get_comparison_ne(self, other):
-        return Bool(self.uuid != other.uuid), None
+        if self.get('ne') != None and isinstance(self.get('ne'), Function):
+            return self.get('ne').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return Bool(self.uuid != other.uuid), None
     
     def get_comparison_lt(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('lt') != None and isinstance(self.get('lt'), Function):
+            return self.get('lt').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def get_comparison_gt(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('gt') != None and isinstance(self.get('gt'), Function):
+            return self.get('gt').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def get_comparison_lte(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('lte') != None and isinstance(self.get('lte'), Function):
+            return self.get('lte').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
     
     def get_comparison_gte(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('gte') != None and isinstance(self.get('lte'), Function):
+            return self.get('gte').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
     
     def anded_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('and') != None and isinstance(self.get('and'), Function):
+            return self.get('and').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def ored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('or') != None and isinstance(self.get('or'), Function):
+            return self.get('or').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
     
     def xored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('xor') != None and isinstance(self.get('xor'), Function):
+            return self.get('xor').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
 
     def notted(self):
-        return None, self.illegal_operation()
+        if self.get('not') != None and isinstance(self.get('not'), Function):
+            return self.get('not').execute(
+                [self],
+                self.context, self.pos_start, self.pos_end
+            )
+        else:
+            return None, self.illegal_operation()
 
     def banded_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('bitand') != None and isinstance(self.get('bitand'), Function):
+            return self.get('bitand').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
     
     def bored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('bitor') != None and isinstance(self.get('bitor'), Function):
+            return self.get('bitor').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
     
     def bxored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('bitxor') != None and isinstance(self.get('bitxor'), Function):
+            return self.get('bitxor').execute(
+                [self, other],
+                self.context, self.pos_start, other.pos_end
+            )
+        else:
+            return None, self.illegal_operation(other)
     
     def bnotted(self):
-        return None, self.illegal_operation()
+        if self.get('bitnot') != None and isinstance(self.get('bitxor'), Function):
+            return self.get('bitnot').execute(
+                [self],
+                self.context, self.pos_start, self.pos_end
+            )
+        else:
+            return None, self.illegal_operation()
 
     def execute(self, args, context, pos_start, pos_end):
-        return None, self.illegal_operation()
+        if self.get('call') != None and isinstance(self.get('call'), Function):
+            return self.get('call').execute(
+                [self] + args,
+                context, pos_start, pos_end
+            )
+        else:
+            return None, self.illegal_operation()
 
     def is_true(self):
         return True
@@ -1675,7 +1836,12 @@ class Object:
         )
     
     def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
-        # print(depth_decr)
+        if self.get('toString') != None and isinstance(self.get('toString'), Function) and self.get('toString').func != execute_object_toString:
+            return repr(self.get('toString').execute(
+                [self],
+                self.context, self.pos_start, self.pos_end
+            )[0])
+
         keys = sorted(list(self.slots.keys()))
         values = [self.slots[key] for key in keys]
 
@@ -1766,6 +1932,25 @@ class Int(Object):
                 return Float(np.inf).set_context(self.context), None
             else:
                 result = self.value / other.value if isinstance(other.value, float) else self.value // other.value
+                if isinstance(result, np.int64):
+                    return Int(result).set_context(self.context), None
+                else:
+                    return Float(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+    
+    def modded_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            if str(other) == '0':
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'division by zero',
+                    self.context
+                )
+            elif str(other) == '0.0':
+                return Float(np.nan).set_context(self.context), None
+            else:
+                result = self.value % other.value
                 if isinstance(result, np.int64):
                     return Int(result).set_context(self.context), None
                 else:
@@ -1884,6 +2069,19 @@ class Float(Object):
                 else:
                     return Float(result).set_context(self.context), None
 
+    def modded_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            if str(other) in ('0', '0.0'):
+                return Float(np.nan).set_context(self.context), None
+            else:
+                result = self.value % other.value
+                if isinstance(result, np.int64):
+                    return Int(result).set_context(self.context), None
+                else:
+                    return Float(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+        
     def negated(self): 
         result = -self.value
         return Float(result).set_context(self.context), None
@@ -2307,6 +2505,8 @@ class Interpreter:
             result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right)
+        elif node.op_tok.type == TT_MOD:
+            result, error = left.modded_by(right)
         elif node.op_tok.type == TT_EQ:      
             if isinstance(node.left_node, VarAccessNode):
                 var_name = node.left_node.var_name_tok.value
@@ -2316,6 +2516,7 @@ class Interpreter:
                 
                 value = right
 
+                print(old_value.context.symbol_table.object.slots)
                 old_value.context.symbol_table.object.set(var_name, value)
                 return res.success(value)
             elif isinstance(node.left_node, DotNotationNode):
@@ -2383,6 +2584,10 @@ class Interpreter:
             return res.success(result)
         elif node.op_tok.type == TT_DIVEQ:
             result = res.register(self.in_place_op(node, context, lambda x, y: x.dived_by(y)))
+            if res.error: return res
+            return res.success(result)
+        elif node.op_tok.type == TT_MODEQ:
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.modded_by(y)))
             if res.error: return res
             return res.success(result)
         elif node.op_tok.type == TT_BANDEQ:
@@ -2526,7 +2731,9 @@ class Interpreter:
             return func_return_value or Nil().set_context(context).set_pos(pos_start, pos_end), None
         
         func_value = Function(func_name, execute).set_context(context).set_pos(node.pos_start, node.pos_end)
-        
+        if len(arg_names) >= 1 and arg_names[0] == 'this':
+            func_value.is_member_function = True
+
         if node.var_name_tok:
             old_value = context.symbol_table.object.slots.get(func_name, None)
             if old_value:
@@ -2557,16 +2764,15 @@ class Interpreter:
             if res.error: return res
 
         if isinstance(value_to_call, Function) and value_to_call.is_member_function and isinstance(node.node_to_call, (DotNotationNode, BracketNotationNode)):
-            obj = res.register(self.visit(node.node_to_call.obj_node, context))
+            obj = res.register(self.visit(node.node_to_call.obj_node, new_context))
             if res.error: return res
 
             return_value, error = value_to_call.execute(
                 [obj] + args,
-                context, node.pos_start, node.pos_end
+                new_context, node.pos_start, node.pos_end
             )
-
         else:
-            return_value, error = value_to_call.execute(args, context, node.pos_start, node.pos_end)
+            return_value, error = value_to_call.execute(args, new_context, node.pos_start, node.pos_end)
         # print(return_value)
         if error: return res.failure(error)
         # print(f'{value_to_call.name} {args} {return_value}')
@@ -2687,6 +2893,28 @@ def execute_floor(args, context, pos_start, pos_end):
         args, context, pos_start, pos_end
     )
 
+def execute_import(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], String):
+        return None, RTError(
+            pos_start, pos_end,
+            f'{args[0]} is not a string',
+            context
+        )
+    
+    url = os.path.abspath(os.path.join(os.getcwd(), args[0].value))
+
+    result, error = run(url)
+    if error: return None, error
+    return global_symbol_table.object.get('_exports') or Nil(), None
+
+def execute_export(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+
+    global_symbol_table.object.set('_exports', args[0])
+
+    return Nil(), None
+
 def execute_log(args, context, pos_start, pos_end):
     return execute_numpy_ufunc(
         np.log,
@@ -2758,6 +2986,7 @@ def execute_print(args, context, pos_start, pos_end):
 
 def execute_println(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
+    print(args[0])
     return Nil(), None
 
 def execute_random(args, context, pos_start, pos_end):
@@ -2805,6 +3034,10 @@ def execute_object_getPrototype(args, context, pos_start, pos_end):
 def execute_object_hashCode(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
     return Int(hash(args[0].uuid)), None
+
+def execute_object_isPrototypeOf(args, context, pos_start, pos_end):
+    args = normalize_args(args, 2, context, pos_start, pos_end)
+    return Bool(isPrototypeOf(args[0], args[1])), None
 
 def execute_object_setPrototype(args, context, pos_start, pos_end):
     args = normalize_args(args, 2, context, pos_start, pos_end)
@@ -3357,7 +3590,7 @@ def execute_function_getName(args, context, pos_start, pos_end):
 
 global_symbol_table.object.set('E', Float(math.e))
 global_symbol_table.object.set('PI', Float(math.pi))
-
+global_symbol_table.object.set('_exports', Object(object_object))
 global_symbol_table.object.set('abs', Function('abs', execute_abs))
 global_symbol_table.object.set('acos', Function('acos', execute_acos))
 global_symbol_table.object.set('asin', Function('asin', execute_asin))
@@ -3367,6 +3600,8 @@ global_symbol_table.object.set('ceil', Function('ceil', execute_ceil))
 global_symbol_table.object.set('cos', Function('cos', execute_cos))
 global_symbol_table.object.set('exp', Function('exp', execute_exp))
 global_symbol_table.object.set('floor', Function('floor', execute_floor))
+global_symbol_table.object.set('import', Function('import', execute_import))
+global_symbol_table.object.set('export', Function('export', execute_export))
 global_symbol_table.object.set('log', Function('log', execute_log))
 global_symbol_table.object.set('max', Function('max', execute_max))
 global_symbol_table.object.set('min', Function('min', execute_min))
@@ -3391,6 +3626,7 @@ global_symbol_table.object.set('Function', function_object)
 object_object.set('new', Function('new', execute_object_new))
 object_object.set('getPrototype', Function('getPrototype', execute_object_getPrototype, True))
 object_object.set('hashCode', Function('hashCode', execute_object_hashCode, True))
+object_object.set('isPrototypeOf', Function('isPrototypeOf', execute_object_isPrototypeOf, True))
 object_object.set('setPrototype', Function('setPrototype', execute_object_setPrototype, True))
 object_object.set('toBool', Function('toBool', execute_object_toBool, True))
 object_object.set('toString', Function('toString', execute_object_toString, True))
@@ -3467,6 +3703,6 @@ def runstring(text):
 
 def run(fn):
     f = open(fn, 'r')
-    result, error = simple_run(f.read(), fn)
-    if error: print(error.as_string())
+    display_name = fn.split('/')[-1]
+    result, error = simple_run(f.read(), display_name)
     return result, error

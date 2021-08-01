@@ -1,0 +1,38 @@
+//Skink standard library source code
+//Usage permitted under terms of MIT License
+
+//Represents pair of values.
+var Rat = {};
+Rat.hcf = func (x, y) {
+    if(y == 0) {
+        return x;
+    } else {
+        return Rat.hcf(y, x % y);
+    }
+}
+
+Rat.new = func (n, d) {
+    var scale = Rat.hcf(n, d);
+    return ({"n": n/scale, "d": d/scale}).setPrototype(Rat);
+}
+
+Rat.plus = func (this, that) {
+    if(Int.isPrototypeOf(that)) {
+        that = Rat.new(that, 1);
+    }
+
+    var a = this.n;
+    var b = this.d;
+    var c = that.n;
+    var d = that.d;
+
+    println(c);
+
+    return Rat.new(a * d + b * c, b * d);
+}
+
+Rat.toString = func (this) {
+    return this.n.toString() + "/" + this.d.toString();
+}
+
+export(Rat);
