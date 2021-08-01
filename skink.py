@@ -2822,24 +2822,6 @@ def execute_string_compareTo(args, context, pos_start, pos_end):
     result = -1 if args[0].value < args[1].value else (0 if args[0].value == args[1].value else 1)
     return Int(result), None
 
-def execute_string_concat(args, context, pos_start, pos_end):
-    args = normalize_args(args, 2, context, pos_start, pos_end)
-    if not isinstance(args[0], String):
-        return None, RTError(
-            args[0].pos_start, args[0].pos_end,
-            f'{args[0]} is not a string',
-            context
-        )
-
-    if not isinstance(args[1], String):
-        return None, RTError(
-            args[1].pos_start, args[1].pos_end,
-            f'{args[1]} is not a string',
-            context
-        )
-        
-    return args[0].added_to(args[1])
-
 def execute_string_endsWith(args, context, pos_start, pos_end):
     args = normalize_args(args, 2, context, pos_start, pos_end)
     if not isinstance(args[0], String):
@@ -2971,7 +2953,7 @@ def execute_string_substring(args, context, pos_start, pos_end):
         )
     
     if isinstance(args[2], Nil):
-        return String(args[0].value[args[1].value:]), None
+        return String(args[0].to_python_list()[args[1].value:]), None
     else:
         if not isinstance(args[2], Int):
             return None, RTError(
@@ -2980,7 +2962,7 @@ def execute_string_substring(args, context, pos_start, pos_end):
                 context
             )
         
-        return String(args[0].value[args[1].value:args[2].value]), None
+        return String(args[0].to_python_list()[args[1].value:args[2].value]), None
 
 def execute_string_toCharList(args, context, pos_start, pos_end):
     args = normalize_args(args, 1, context, pos_start, pos_end)
@@ -3082,24 +3064,6 @@ def execute_list_clear(args, context, pos_start, pos_end):
 
     return Nil(), None
 
-def execute_list_concat(args, context, pos_start, pos_end):
-    args = normalize_args(args, 2, context, pos_start, pos_end)
-    if not isinstance(args[0], List):
-        return None, RTError(
-            args[0].pos_start, args[0].pos_end,
-            f'{args[0]} is not a list',
-            context
-        )
-
-    if not isinstance(args[1], List):
-        return None, RTError(
-            args[0].pos_start, args[0].pos_end,
-            f'{args[1]} is not a list',
-            context
-        )
-
-    return args[0].added_to(args[1]), None
-
 def execute_list_contains(args, context, pos_start, pos_end):
     args = normalize_args(args, 2, context, pos_start, pos_end)
     if not isinstance(args[0], List):
@@ -3173,7 +3137,7 @@ def execute_list_length(args, context, pos_start, pos_end):
             context
         )
 
-    return Int(len(args[0])), None
+    return Int(len(args[0].to_python_list())), None
 
 def execute_list_remove(args, context, pos_start, pos_end):
     args = normalize_args(args, 2, context, pos_start, pos_end)
@@ -3269,6 +3233,17 @@ def execute_function_new(args, context, pos_start, pos_end):
         lambda args, context, pos_start, pos_end: (Nil(), None)
     ), None
 
+def execute_function_getName(args, context, pos_start, pos_end):
+    args = normalize_args(args, 1, context, pos_start, pos_end)
+    if not isinstance(args[0], Function):
+        return None, RTError(
+            pos_start, pos_end,
+            f'{args[0]} is not a function',
+            context
+        )
+
+    return String(args[0].name), None
+
 global_symbol_table.object.set('E', Float(math.e))
 global_symbol_table.object.set('PI', Float(math.pi))
 
@@ -3328,7 +3303,6 @@ bool_object.set('new', Function('new', execute_bool_new))
 string_object.set('new', Function('new', execute_string_new))
 string_object.set('charAt', Function('charAt', execute_string_charAt, True))
 string_object.set('compareTo', Function('compareTo', execute_string_compareTo, True))
-string_object.set('concat', Function('concat', execute_string_concat, True))
 string_object.set('endsWith', Function('endsWith', execute_string_endsWith, True))
 string_object.set('indexOf', Function('indexOf', execute_string_indexOf, True))
 string_object.set('lastIndexOf', Function('lastIndexOf', execute_string_indexOf, True))
@@ -3345,7 +3319,6 @@ string_object.set('toUpperCase', Function('toUpperCase', execute_string_toUpperC
 list_object.set('new', Function('new', execute_list_new))
 list_object.set('add', Function('add', execute_list_add, True))
 list_object.set('clear', Function('clear', execute_list_clear, True))
-list_object.set('concat', Function('concat', execute_list_concat, True))
 list_object.set('contains', Function('contains', execute_list_contains, True))
 list_object.set('indexOf', Function('indexOf', execute_list_indexOf, True))
 list_object.set('isEmpty', Function('isEmpty', execute_list_isEmpty, True))
@@ -3356,6 +3329,7 @@ list_object.set('subList', Function('subList', execute_list_subList, True))
 list_object.set('transform', Function('transform', execute_list_transform, True))
 
 function_object.set('new', Function('new', execute_function_new))
+function_object.set('getName', Function('get_name', execute_function_getName, True))
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
