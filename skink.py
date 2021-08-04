@@ -49,7 +49,7 @@ class RTError(Error):
 
     def as_string(self):
         result  = f'{self.pos_start.fn}:{self.pos_start.ln + 1}:{self.pos_start.col + 1}: '
-        result  += f'{self.error_name}: {self.details}\n'
+        result  += f'error: {self.details}\n'
         result  += 'stack traceback: '
         result  += self.generate_traceback()
         return result
@@ -102,6 +102,7 @@ class Position:
 TT_INT		= 'INT'
 TT_FLOAT    = 'FLOAT'
 TT_IDENTIFIER = 'IDENTIFIER'
+TT_STRING   = 'STRING'
 TT_KEYWORD  = 'KEYWORD'
 TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
@@ -200,6 +201,10 @@ class Lexer:
                 tokens.append(self.make_number())
             elif self.current_char in LETTERS:
                 tokens.append(self.make_identifier())
+            elif self.current_char == '"':
+                tok, error = self.make_string()
+                if error: return [], None
+                tokens.append(tok)
             elif self.current_char == '+':
                 tokens.append(self.make_plus())
                 # self.advance()
@@ -210,19 +215,19 @@ class Lexer:
             elif self.current_char == '/':
                 tokens.append(self.make_div())
             elif self.current_char == '(':
-                tokens.append(Token(TT_LPAREN, pos_start=self.pos))
+                tokens.append(Token(TT_LPAREN, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == ')':
-                tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                tokens.append(Token(TT_RPAREN, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '{':
-                tokens.append(Token(TT_LCURLY, pos_start=self.pos))
+                tokens.append(Token(TT_LCURLY, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '}':
-                tokens.append(Token(TT_RCURLY, pos_start=self.pos))
+                tokens.append(Token(TT_RCURLY, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == ',':
-                tokens.append(Token(TT_COMMA, pos_start=self.pos))
+                tokens.append(Token(TT_COMMA, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char == '!':
                 tokens.append(self.make_not_equals())
@@ -239,10 +244,10 @@ class Lexer:
             elif self.current_char == '^':
                 tokens.append(self.make_xor())
             elif self.current_char == '~':
-                tokens.append(Token(TT_BITNOT, pos_start=self.pos))
+                tokens.append(Token(TT_BITNOT, pos_start=self.pos.copy()))
                 self.advance()
             elif self.current_char in NEWLINES + ';':
-                tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
+                tokens.append(Token(TT_NEWLINE, pos_start=self.pos.copy()))
                 self.advance()
             else:
                 pos_start = self.pos.copy()
@@ -250,7 +255,7 @@ class Lexer:
                 self.advance()
                 return [], IllegalCharError(pos_start, self.pos, f'illegal character "{char}"')
 
-        tokens.append(Token(TT_EOF, pos_start=self.pos))
+        tokens.append(Token(TT_EOF, pos_start=self.pos.copy()))
         return tokens, None
 
     def make_number(self):
@@ -283,6 +288,38 @@ class Lexer:
 
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
         return Token(tok_type, id_str, pos_start, self.pos.copy())
+
+    def make_string(self):
+        string = ''
+        pos_start = self.pos.copy()
+        escape_character = False
+        self.advance()
+        
+        escape_characters = {
+            't': '\u0009',
+            'b': '\u0008',
+            'n': '\u000a',
+            'r': '\u000d',
+            'f': '\u000c',
+            '"': '"',
+            '\\': '\\\\'
+        }
+
+        while self.current_char != '"' or escape_character:
+            if self.current_char == None:
+                return None, InvalidSyntaxError(pos_start, self.pos.copy(), 'unclosed string literal')
+            if escape_character:
+                string += escape_characters.get(self.current_char, self.current_char)
+                escape_character = False
+            else:
+                if self.current_char == '\\':
+                    escape_character = True
+                else:
+                    string += self.current_char
+            self.advance()
+            
+        self.advance()
+        return Token(TT_STRING, string, pos_start, self.pos.copy()), None
 
     def make_plus(self):
         tok_type = TT_PLUS
@@ -415,6 +452,7 @@ class Lexer:
 
         return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
+    
 #######################################
 # NODES
 #######################################
@@ -437,6 +475,15 @@ class NumberNode:
         return f'{self.tok}'
 
 class BoolNode:
+    def __init__(self, tok):
+        self.tok = tok
+        self.pos_start = tok.pos_start
+        self.pos_end = tok.pos_end
+    
+    def __repr__(self):
+        return f'{self.tok}'
+
+class StringNode:
     def __init__(self, tok):
         self.tok = tok
         self.pos_start = tok.pos_start
@@ -662,6 +709,11 @@ class Parser:
             self.advance()
             return res.success(BoolNode(tok))
 
+        elif tok.type == TT_STRING:
+            res.register_advancement()
+            self.advance()
+            return res.success(StringNode(tok))
+
         elif tok.type == TT_IDENTIFIER:
             res.register_advancement()
             self.advance()
@@ -705,7 +757,7 @@ class Parser:
                 if res.error:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        "Expected ')', 'VAR', 'IF', 'FOR', 'WHILE', 'FUN', int, float, identifier, '+', '-', '(' or 'NOT'"
+                        self.current_tok.get_error_message()
                     ))
 
                 while self.current_tok.type == TT_COMMA:
@@ -718,7 +770,7 @@ class Parser:
                 if self.current_tok.type != TT_RPAREN:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f"Expected ',' or ')'"
+                        self.current_tok.get_error_message()
                     ))
 
                 res.register_advancement()
@@ -1637,6 +1689,24 @@ class Bool(Object):
     def __repr__(self):
         return 'true' if self.value else 'false'
 
+class String(Object):
+    def __init__(self, value):
+        super().__init__(string_object)
+        self.value = value
+    
+    def added_to(self, other):
+        if isinstance(other, String):
+            result = self.value + other.value
+            return String(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+
+    def is_true(self):
+        return len(self.value) > 0
+    
+    def __repr__(self):
+        return self.value
+        
 class Function(Object):
     def __init__(self, name, body_node, arg_names):
         super().__init__(function_object)
@@ -1675,6 +1745,7 @@ null_object = Object(object_object)
 int_object = Object(object_object)
 float_object = Object(object_object)
 bool_object = Object(object_object)
+string_object = Object(object_object)
 function_object = Object(object_object)
 
 #######################################
@@ -1725,6 +1796,11 @@ class Interpreter:
             return res.success(
                 Float(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
             )   
+
+    def visit_StringNode(self, node, context):
+        return RTResult().success(
+            String(node.tok.value).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
     def visit_BoolNode(self, node, context):
         return RTResult().success(
@@ -2146,6 +2222,7 @@ global_symbol_table.object.set('Null', null_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
+global_symbol_table.object.set('String', string_object)
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
