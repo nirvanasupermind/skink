@@ -1073,7 +1073,7 @@ class Parser:
         res.register_advancement()
         self.advance()
 
-        if self.current_tok == TT_IDENTIFIER:
+        if self.current_tok.type == TT_IDENTIFIER:
             var_name_tok = self.current_tok
             res.register_advancement()
             self.advance()
