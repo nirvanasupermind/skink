@@ -452,7 +452,7 @@ class VarAccessNode:
 		self.pos_start = self.var_name_tok.pos_start
 		self.pos_end = self.var_name_tok.pos_end
 
-class VarDeclareNode:
+class VarAssignNode:
 	def __init__(self, var_name_tok, value_node):
 		self.var_name_tok = var_name_tok
 		self.value_node = value_node
@@ -687,8 +687,47 @@ class Parser:
             self.current_tok.get_error_message()
         ))
 
+    def call(self):
+        res = ParseResult()
+        atom = res.register(self.factor())
+        if res.error: return res
+
+        if self.current_tok.type == TT_LPAREN:
+            res.register_advancement()
+            self.advance()
+            arg_nodes = []
+
+            if self.current_tok.type == TT_RPAREN:
+                res.register_advancement()
+                self.advance()
+            else:
+                arg_nodes.append(res.register(self.expr()))
+                if res.error:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        "Expected ')', 'VAR', 'IF', 'FOR', 'WHILE', 'FUN', int, float, identifier, '+', '-', '(' or 'NOT'"
+                    ))
+
+                while self.current_tok.type == TT_COMMA:
+                    res.register_advancement()
+                    self.advance()
+
+                    arg_nodes.append(res.register(self.expr()))
+                    if res.error: return res
+
+                if self.current_tok.type != TT_RPAREN:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        f"Expected ',' or ')'"
+                    ))
+
+                res.register_advancement()
+                self.advance()
+            return res.success(CallNode(atom, arg_nodes))
+        return res.success(atom)
+        
     def term(self):
-        return self.bin_op(self.factor, (TT_MUL, TT_DIV))
+        return self.bin_op(self.call, (TT_MUL, TT_DIV))
 
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -796,7 +835,7 @@ class Parser:
         
         return res.success(statements)
 
-    def var_declare_expr(self):
+    def var_assign_expr(self):
         res = ParseResult()
         res.register_advancement()
         self.advance()
@@ -824,7 +863,7 @@ class Parser:
         expr = res.register(self.expr())
         if res.error: return res
 
-        return res.success(VarDeclareNode(var_name, expr))
+        return res.success(VarAssignNode(var_name, expr))
     
 
     def if_expr(self):
@@ -1142,22 +1181,59 @@ class Parser:
 #######################################
 # RUNTIME RESULT
 #######################################
+
 class RTResult:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.value = None
         self.error = None
-    
+        self.func_return_value = None
+
     def register(self, res):
-        if res.error: self.error = res.error
+        # print(res)
+        self.error = res.error
+        self.func_return_value = res.func_return_value
+        # print(res.value)
         return res.value
 
     def success(self, value):
+        # self.reset()
         self.value = value
+        # print(self.value)
+        return self
+
+    def success_return(self, value):
+        # self.reset()
+        self.func_return_value = value
+        # print(self.value)
         return self
     
+    def success_continue(self):
+        self.reset()
+        self.loop_should_continue = True
+        return self
+
+    def success_break(self):
+        self.reset()
+        self.loop_should_break = True
+        return self
+
     def failure(self, error):
+        self.reset()
         self.error = error
         return self
+
+    def should_return(self):
+        # Note: this will allow you to continue and break outside the current function
+        return (
+            self.error or
+            self.func_return_value or
+            self.loop_should_continue or
+            self.loop_should_break
+        )
+        
 
 #######################################
 # VALUES
@@ -1239,17 +1315,20 @@ class Object:
     def notted(self):
         return None, self.illegal_operation()
     
-    def banded_by(self, other):
+    def bitanded_by(self, other):
         return None, self.illegal_operation(other)
     
-    def bored_by(self, other):
+    def bitored_by(self, other):
         return None, self.illegal_operation(other)
     
-    def bxored_by(self, other):
+    def bitxored_by(self, other):
         return None, self.illegal_operation(other)
     
-    def bnotted(self):
+    def bitnotted(self):
         return None, self.illegal_operation()
+
+    def execute(self, args, pos_start, pos_end):
+        return RTResult().failure(self.illegal_operation())
 
     def is_true(self):
         return True
@@ -1397,28 +1476,28 @@ class Int(Object):
         else:
             return None, Object.illegal_operation(self, other)
 
-    def banded_by(self, other):
+    def bitanded_by(self, other):
         if isinstance(other, Int):
             result = self.value & other.value
             return Int(result).set_context(self.context), None
         else:
             return None, Object.illegal_operation(self, other)
 
-    def bored_by(self, other):
+    def bitored_by(self, other):
         if isinstance(other, Int):
             result = self.value | other.value
             return Int(result).set_context(self.context), None
         else:
             return None, Object.illegal_operation(self, other)
 
-    def bxored_by(self, other):
+    def bitxored_by(self, other):
         if isinstance(other, Int):
             result = self.value ^ other.value
             return Int(result).set_context(self.context), None
         else:
             return None, Object.illegal_operation(self, other)
 
-    def bnotted(self):
+    def bitnotted(self):
         return Int(~self.value).set_context(self.context), None
 
     def is_true(self):
@@ -1557,15 +1636,46 @@ class Bool(Object):
 
     def __repr__(self):
         return 'true' if self.value else 'false'
+
+class Function(Object):
+    def __init__(self, name, body_node, arg_names):
+        super().__init__(function_object)
+        self.name = name
+        self.body_node = body_node
+        self.arg_names = arg_names
+
+    def execute(self, args, pos_start, pos_end):
+        res = RTResult()
+        interpreter = Interpreter()
+        new_context = Context(self.name, self.context, self.pos_start, True)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+
+        while len(args) < len(self.arg_names):
+            args.append(Null().set_pos(pos_start, pos_end))
         
+        for i in range(len(self.arg_names)):
+            arg_name = self.arg_names[i]
+            arg_value = args[i]
+            arg_value.set_context(new_context)
+            new_context.symbol_table.object.set(arg_name, arg_value)
+        
+        value = res.register(interpreter.visit(self.body_node, new_context))
+        if res.error: return res
+        return res.success(value)
+    
+    def __repr__(self):
+        return f'<function {self.name}>'
+
+    
 #######################################
-# OBJECTS
+# OBJECT
 #######################################
 object_object = Object()
 null_object = Object(object_object)
 int_object = Object(object_object)
 float_object = Object(object_object)
 bool_object = Object(object_object)
+function_object = Object(object_object)
 
 #######################################
 # CONTEXT
@@ -1635,7 +1745,7 @@ class Interpreter:
         
         return res.success(value.set_pos(node.pos_start, node.pos_end))
      
-    def visit_VarDeclareNode(self, node, context):
+    def visit_VarAssignNode(self, node, context):
         res = RTResult()
         var_name = node.var_name_tok.value
         old_value = context.symbol_table.object.slots.get(var_name, None)
@@ -1721,11 +1831,11 @@ class Interpreter:
         elif node.op_tok.type == TT_XOR:
             result, error = left.xored_by(right)
         elif node.op_tok.type == TT_BITAND:
-            result, error = left.banded_by(right)
+            result, error = left.bitanded_by(right)
         elif node.op_tok.type == TT_BITOR:
-            result, error = left.bored_by(right)
+            result, error = left.bitored_by(right)
         elif node.op_tok.type == TT_BITXOR:
-            result, error = left.bxored_by(right)
+            result, error = left.bitxored_by(right)
         elif node.op_tok.type == TT_PLUSEQ:
 
             if not isinstance(node.left_node, VarAccessNode):
@@ -1832,7 +1942,7 @@ class Interpreter:
             # print(value)
             if res.error: return res
             
-            result, error = old_value.banded_by(value)
+            result, error = old_value.bitanded_by(value)
             if error: return res.failure(error)
 
             old_value.context.symbol_table.object.set(var_name, result)
@@ -1854,7 +1964,7 @@ class Interpreter:
             # print(value)
             if res.error: return res
             
-            result, error = old_value.bored_by(value)
+            result, error = old_value.bitored_by(value)
             if error: return res.failure(error)
 
             old_value.context.symbol_table.object.set(var_name, result)
@@ -1876,7 +1986,7 @@ class Interpreter:
             # print(value)
             if res.error: return res
             
-            result, error = old_value.bxored_by(value)
+            result, error = old_value.bitxored_by(value)
             if error: return res.failure(error)
 
             old_value.context.symbol_table.object.set(var_name, result)
@@ -1898,7 +2008,7 @@ class Interpreter:
         elif node.op_tok.type == TT_NOT:
             number, error = number.notted()
         elif node.op_tok.type == TT_BITNOT:
-            number, error = number.bnotted()
+            number, error = number.bitnotted()
         
         if error: return res.failure(error)
         return res.success(number.set_pos(node.pos_start, node.pos_end))
@@ -1972,7 +2082,6 @@ class Interpreter:
         new_context = Context('while loop', context, node.pos_start)
         new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
 
-
         while True:
             condition = res.register(self.visit(node.condition_node, context))
             if res.error: return res
@@ -1985,6 +2094,46 @@ class Interpreter:
         return res.success(
             Null().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
+
+    def visit_FuncDefNode(self, node, context):
+        res = RTResult()
+
+        func_name = node.var_name_tok.value if node.var_name_tok else '<anonymous>'
+        body_node = node.body_node
+        arg_names = [arg_name.value for arg_name in node.arg_name_toks]
+        func_value = Function(func_name, body_node, arg_names).set_context(context).set_pos(node.pos_start, node.pos_end)
+        
+        if node.var_name_tok:
+            context.symbol_table.object.set(func_name, func_value)
+
+        return res.success(func_value)
+
+    def visit_CallNode(self, node, context):
+        res = RTResult()
+        args = []
+
+        value_to_call = res.register(self.visit(node.node_to_call, context))
+        if res.error: return res
+        value_to_call = value_to_call.set_pos(node.pos_start, node.pos_end)
+
+        for arg_node in node.arg_nodes:
+            args.append(res.register(self.visit(arg_node, context)))
+            if res.error: return res
+
+        return_value = res.register(value_to_call.execute(args, node.pos_start, node.pos_end))
+        if res.error: return res
+        if not res.func_return_value:
+            return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
+        return res.success(res.func_return_value)
+
+    def visit_ReturnNode(self, node, context):
+        res = RTResult()
+        expr = res.register(self.visit(node.node_to_return, context))
+        if res.error: return res
+
+        return res.success_return(expr).success(
+            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+        )      
 
 #######################################
 # RUN
