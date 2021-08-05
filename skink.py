@@ -216,7 +216,8 @@ class Lexer:
             elif self.current_char == '*':
                 tokens.append(self.make_mul())
             elif self.current_char == '/':
-                tokens.append(self.make_div())
+                tok = self.make_div()
+                if tok: tokens.append(tok)
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos.copy()))
                 self.advance()
@@ -371,9 +372,19 @@ class Lexer:
         pos_start = self.pos.copy()
         self.advance()
 
+        if self.current_char == '/':
+            self.advance()
+            while self.current_char != None and not self.current_char in NEWLINES:
+                self.advance()
+            
+            self.advance()
+            return
+
+
         if self.current_char == '=':
             self.advance()
             tok_type = TT_DIVEQ
+
 
         return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
@@ -532,7 +543,7 @@ class TupleNode:
 
         self.pos_start = pos_start
         self.pos_end = pos_end
-
+        
 class StatementsNode:
     def __init__(self, element_nodes, pos_start, pos_end):
         self.element_nodes = element_nodes
@@ -2545,3 +2556,10 @@ def runstring(text, fn='<anonymous>'):
     if result.error: return None, result.error
 
     return result.value, None
+
+def run(fn):
+    f = open(fn)
+    display_fn = fn.split('/')[-1]
+
+    return runstring(f.read(), display_fn)
+

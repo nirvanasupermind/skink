@@ -1,4 +1,9 @@
-var Rat = import("./stdlib/Rat.skink");
-var myRat = Rat.new(1, 2);
+function fib(n) {
+    if(n <= 1) {
+        return 1;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    }
+}
 
-println(myRat + 1);
+System.print(fib(7)); //21
