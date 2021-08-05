@@ -1445,22 +1445,18 @@ class RTResult:
         self.func_return_value = None
 
     def register(self, res):
-        # print(res)
         self.error = res.error
         self.func_return_value = res.func_return_value
-        # print(res.value)
         return res.value
 
     def success(self, value):
         # self.reset()
         self.value = value
-        # print(self.value)
         return self
 
     def success_return(self, value):
         # self.reset()
         self.func_return_value = value
-        # print(self.value)
         return self
     
     def success_continue(self):
@@ -1506,7 +1502,8 @@ class Object:
         return self
 
     def set_context(self, context=None):
-        self.context = context
+        if not (hasattr(self, 'context') and self.context):
+            self.context = context
         return self
         
     def get(self, name):
@@ -1595,7 +1592,6 @@ class Object:
         )
     
     def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
-        # print(depth_decr)
         keys = list(self.slots.keys())
         values = list(self.slots.values())
 
@@ -1986,7 +1982,7 @@ class Function(BaseFunction):
     def execute(self, args, pos_start, pos_end):
         res = RTResult()
         interpreter = Interpreter()
-        print(self.context.symbol_table.object.slots)
+        # print(self.context.display_name)
         new_context = self.generate_new_context()
 
         self.normalize_and_populate_args(
@@ -2226,6 +2222,7 @@ class Interpreter:
         res = RTResult()
 
         left = res.register(self.visit(node.left_node, context))
+        if res.error: return res
         right = res.register(self.visit(node.right_node, context))
         if res.error: return res
 
@@ -2479,6 +2476,7 @@ class Interpreter:
         if res.error: return res
         if not res.func_return_value:
             return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
+        
         return res.success(res.func_return_value.set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_DotNotationNode(self, node, context):
@@ -2612,7 +2610,7 @@ function_new =  BuiltInFunction('new', execute_function_new, [])
 # RUN
 #######################################
 global_symbol_table = SymbolTable(Object(object_object))
-# global_symbol_table.object.set('global', global_symbol_table.object)
+global_symbol_table.object.set('global', global_symbol_table.object)
 
 global_symbol_table.object.set('Object', object_object)
 global_symbol_table.object.set('Null', null_object)
@@ -2624,7 +2622,6 @@ global_symbol_table.object.set('List', list_object)
 global_symbol_table.object.set('Tuple', tuple_object)
 global_symbol_table.object.set('Function', function_object)
 global_symbol_table.object.set('System', system_object)
-global_symbol_table.object.set('Math', math_object)
 
 object_object.set('new', object_new)
 
