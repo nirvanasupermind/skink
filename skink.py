@@ -18,6 +18,14 @@ NEWLINES = '\n\r'
 DEFAULT_MAX_DEPTH = 6
 
 #######################################
+# UTILITY FUNCTIONS
+#######################################
+
+def to_skink_number(n):
+    if isinstance(n, np.int64): return Int(n)
+    return Float(n)
+
+#######################################
 # ERRORS
 #######################################
 
@@ -1978,6 +1986,7 @@ class Function(BaseFunction):
     def execute(self, args, pos_start, pos_end):
         res = RTResult()
         interpreter = Interpreter()
+        print(self.context.symbol_table.object.slots)
         new_context = self.generate_new_context()
 
         self.normalize_and_populate_args(
@@ -1987,6 +1996,7 @@ class Function(BaseFunction):
 
         value = res.register(interpreter.visit(self.body_node, new_context))
         if res.error: return res
+
         return res.success(value)
     
     def __repr__(self):
@@ -2007,7 +2017,7 @@ class BuiltInFunction(BaseFunction):
             self.arg_names, args, exec_ctx
         )
 
-        return_value = res.register(self.method(exec_ctx))
+        return_value = res.register(self.method(self.pos_start, self.pos_end, exec_ctx))
         if res.error: return res
 
         return res.success(return_value)
@@ -2028,6 +2038,7 @@ list_object = Object(object_object)
 tuple_object = Object(object_object)
 function_object = Object(object_object)
 system_object = Object(object_object)
+math_object = Object(object_object)
 
 #######################################
 # CONTEXT
@@ -2124,7 +2135,7 @@ class Interpreter:
                 context
             ))
         
-        return res.success(value.set_pos(node.pos_start, node.pos_end))
+        return res.success(value.set_context(context).set_pos(node.pos_start, node.pos_end))
      
     def visit_VarAssignNode(self, node, context):
         res = RTResult()
@@ -2454,9 +2465,15 @@ class Interpreter:
         if res.error: return res
         value_to_call = value_to_call.set_pos(node.pos_start, node.pos_end)
 
+        if isinstance(value_to_call, BaseFunction) and value_to_call.arg_names and value_to_call.arg_names[0] == 'this' and isinstance(node.node_to_call, (DotNotationNode, BracketNotationNode)):
+            obj = res.register(self.visit(node.node_to_call.obj_node, context))
+            if res.error: return res
+            args.append(obj)
+
         for arg_node in node.arg_nodes:
             args.append(res.register(self.visit(arg_node, context)))
             if res.error: return res
+
 
         return_value = res.register(value_to_call.execute(args, node.pos_start, node.pos_end))
         if res.error: return res
@@ -2507,22 +2524,95 @@ class Interpreter:
 #######################################
 # BUILT-IN FUNCTIONS
 #######################################
-def execute_system_write(exec_ctx):
-    print(str(exec_ctx.symbol_table.object.get('value')), end='')
-    return RTResult().success(Null())
-
-def execute_system_print(exec_ctx):
+def execute_system_print(pos_start, pos_end, exec_ctx):
     print(str(exec_ctx.symbol_table.object.get('value')))
-    return RTResult().success(Null())
-    
-BuiltInFunction.system_print = BuiltInFunction('print', execute_system_print, ['value'])
-BuiltInFunction.system_write = BuiltInFunction('write', execute_system_write, ['value'])
+    return RTResult().success_return(Null())
+
+def execute_system_write(pos_start, pos_end, exec_ctx):
+    print(str(exec_ctx.symbol_table.object.get('value')), end='')
+    return RTResult().success_return(Null())
+
+def execute_system_prompt(pos_start, pos_end, exec_ctx):
+    result = input()
+    return RTResult().success_return(String(result))
+
+def execute_object_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Object(object_object))
+
+def execute_null_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Null())
+
+def execute_int_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Int(0))
+
+def execute_float_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Float(0.0))
+
+def execute_float_sin(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, (Float, )):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be float',
+            exec_ctx
+        ))
+
+    return res.success_return(to_skink_number(np.sin(this.value)))
+
+def execute_float_cos(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, (Float, )):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be float',
+            exec_ctx
+        ))
+
+    return res.success_return(to_skink_number(np.cos(this.value)))
+
+def execute_bool_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Bool(False))
+
+def execute_string_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(String(''))
+
+def execute_list_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(List([]))
+
+def execute_tuple_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Tuple(()))
+
+def execute_function_new(pos_start, pos_end, exec_ctx):
+    def execute(pos_start, pos_end, exec_ctx):
+        return RTResult().success(Null())
+
+    result = BuiltInFunction('<anonymous>', execute, [])
+
+    return RTResult().success_return(result)
+
+system_print = BuiltInFunction('print', execute_system_print, ['value'])
+system_write = BuiltInFunction('write', execute_system_write, ['value'])
+system_prompt = BuiltInFunction('prompt', execute_system_prompt, [])
+
+object_new =  BuiltInFunction('new', execute_object_new, [])
+null_new =  BuiltInFunction('new', execute_null_new, [])
+int_new =  BuiltInFunction('new', execute_int_new, [])
+float_new =  BuiltInFunction('new', execute_float_new, [])
+float_sin =  BuiltInFunction('sin', execute_float_sin, ['this'])
+float_cos =  BuiltInFunction('cos', execute_float_cos, ['this'])
+bool_new =  BuiltInFunction('new', execute_bool_new, [])
+string_new =  BuiltInFunction('new', execute_string_new, [])
+list_new =  BuiltInFunction('new', execute_list_new, [])
+tuple_new =  BuiltInFunction('new', execute_tuple_new, [])
+function_new =  BuiltInFunction('new', execute_function_new, [])
 
 #######################################
 # RUN
 #######################################
 global_symbol_table = SymbolTable(Object(object_object))
-global_symbol_table.object.set('global', global_symbol_table.object)
+# global_symbol_table.object.set('global', global_symbol_table.object)
 
 global_symbol_table.object.set('Object', object_object)
 global_symbol_table.object.set('Null', null_object)
@@ -2532,10 +2622,35 @@ global_symbol_table.object.set('Bool', bool_object)
 global_symbol_table.object.set('String', string_object)
 global_symbol_table.object.set('List', list_object)
 global_symbol_table.object.set('Tuple', tuple_object)
+global_symbol_table.object.set('Function', function_object)
 global_symbol_table.object.set('System', system_object)
+global_symbol_table.object.set('Math', math_object)
 
-system_object.set('write', BuiltInFunction.system_write)
-system_object.set('print', BuiltInFunction.system_print)
+object_object.set('new', object_new)
+
+null_object.set('new', null_new)
+
+int_object.set('new', int_new)
+
+float_object.set('E', Float(np.e))
+float_object.set('PI', Float(np.pi))
+float_object.set('new', float_new)
+float_object.set('sin', float_sin)
+float_object.set('cos', float_cos)
+
+bool_object.set('new', bool_new)
+
+string_object.set('new', string_new)
+
+list_object.set('new', list_new)
+
+tuple_object.set('new', tuple_new)
+
+function_object.set('new', function_new)
+
+system_object.set('print', system_print)
+system_object.set('write', system_write)
+system_object.set('prompt', system_prompt)
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
