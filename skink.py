@@ -765,8 +765,16 @@ class Parser:
             pos_start = self.current_tok.pos_start.copy()
             res.register_advancement()
             self.advance()
+
+            if self.current_tok.type == TT_LPAREN:
+                res.register_advancement()
+                self.advance()   
+                return res.success(TupleNode([], pos_start, self.current_tok.pos_end.copy()))           
+                
+                
             expr = res.register(self.expr())
             if res.error: return res
+
             if self.current_tok.type == TT_COMMA:
                 res.register_advancement()
                 self.advance()
@@ -1923,9 +1931,35 @@ class Tuple(Object):
     def __repr__(self):
         return repr(self.value)
 
-class Function(Object):
-    def __init__(self, name, body_node, arg_names):
+class BaseFunction(Object):
+    def __init__(self, name):
         super().__init__(function_object)
+        self.name = name or '<anonymous>'
+
+    def generate_new_context(self):
+        new_context = Context(self.name, self.context, self.pos_start)
+        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+        return new_context
+    
+    def normalize_args(self, pos_start, pos_end, arg_names, args):
+        while len(args) < len(arg_names):
+            args.append(Null().set_pos(pos_start, pos_end))
+        return args
+    
+    def populate_args(self, arg_names, args, exec_ctx):
+        for i in range(len(arg_names)):
+            arg_name = arg_names[i]
+            arg_value = args[i]
+            arg_value.set_context(exec_ctx)
+            exec_ctx.symbol_table.object.set(arg_name, arg_value)
+    
+    def normalize_and_populate_args(self, pos_start, pos_end, arg_names, args, exec_ctx):
+        args = self.normalize_args(pos_start, pos_end, arg_names, args)
+        self.populate_args(arg_names, args, exec_ctx)
+     
+class Function(BaseFunction):
+    def __init__(self, name, body_node, arg_names):
+        super().__init__(name)
         self.name = name
         self.body_node = body_node
         self.arg_names = arg_names
@@ -1933,18 +1967,13 @@ class Function(Object):
     def execute(self, args, pos_start, pos_end):
         res = RTResult()
         interpreter = Interpreter()
-        new_context = Context(self.name, self.context, self.pos_start, True)
-        new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
+        new_context = self.generate_new_context()
 
-        while len(args) < len(self.arg_names):
-            args.append(Null().set_pos(pos_start, pos_end))
-        
-        for i in range(len(self.arg_names)):
-            arg_name = self.arg_names[i]
-            arg_value = args[i]
-            arg_value.set_context(new_context)
-            new_context.symbol_table.object.set(arg_name, arg_value)
-        
+        self.normalize_and_populate_args(
+            pos_start, pos_end, 
+            self.arg_names, args, new_context
+        )
+
         value = res.register(interpreter.visit(self.body_node, new_context))
         if res.error: return res
         return res.success(value)
@@ -1952,8 +1981,31 @@ class Function(Object):
     def __repr__(self):
         return f'<function {self.name}>'
 
+class BuiltInFunction(BaseFunction):
+    def __init__(self, name, method, arg_names):
+        super().__init__(name)
+        self.method = method
+        self.arg_names = arg_names
+
+    def execute(self, args, pos_start, pos_end):
+        res = RTResult()
+        exec_ctx = self.generate_new_context()
+                
+        self.normalize_and_populate_args(
+            pos_start, pos_end,
+            self.arg_names, args, exec_ctx
+        )
+
+        return_value = res.register(self.method(exec_ctx))
+        if res.error: return res
+
+        return res.success(return_value)
+
+    def __repr__(self):
+        return f'<function {self.name}>'
+
 #######################################
-# OBJECT
+# OBJECTS
 #######################################
 object_object = Object()
 null_object = Object(object_object)
@@ -1964,6 +2016,7 @@ string_object = Object(object_object)
 list_object = Object(object_object)
 tuple_object = Object(object_object)
 function_object = Object(object_object)
+system_object = Object(object_object)
 
 #######################################
 # CONTEXT
@@ -2398,7 +2451,7 @@ class Interpreter:
         if res.error: return res
         if not res.func_return_value:
             return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
-        return res.success(res.func_return_value)
+        return res.success(res.func_return_value.set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_DotNotationNode(self, node, context):
         res = RTResult()
@@ -2413,7 +2466,7 @@ class Interpreter:
                 Null().set_context(context).set_pos(node.pos_start, node.pos_end)
             )
         else:
-            return res.success(result)
+            return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_BracketNotationNode(self, node, context):
         res = RTResult()
@@ -2429,7 +2482,7 @@ class Interpreter:
                 Null().set_context(context).set_pos(node.pos_start, node.pos_end)
             )
         else:
-            return res.success(result)
+            return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_ReturnNode(self, node, context):
         res = RTResult()
@@ -2438,7 +2491,21 @@ class Interpreter:
 
         return res.success_return(expr).success(
             Null().set_context(context).set_pos(node.pos_start, node.pos_end)
-        )      
+        )    
+
+#######################################
+# BUILT-IN FUNCTIONS
+#######################################
+def execute_system_write(exec_ctx):
+    print(str(exec_ctx.symbol_table.object.get('value')), end='')
+    return RTResult().success(Null())
+
+def execute_system_print(exec_ctx):
+    print(str(exec_ctx.symbol_table.object.get('value')))
+    return RTResult().success(Null())
+    
+BuiltInFunction.system_print = BuiltInFunction('print', execute_system_print, ['value'])
+BuiltInFunction.system_write = BuiltInFunction('write', execute_system_write, ['value'])
 
 #######################################
 # RUN
@@ -2454,6 +2521,10 @@ global_symbol_table.object.set('Bool', bool_object)
 global_symbol_table.object.set('String', string_object)
 global_symbol_table.object.set('List', list_object)
 global_symbol_table.object.set('Tuple', tuple_object)
+global_symbol_table.object.set('System', system_object)
+
+system_object.set('write', BuiltInFunction.system_write)
+system_object.set('print', BuiltInFunction.system_print)
 
 def runstring(text, fn='<anonymous>'):
     # Generate tokens
