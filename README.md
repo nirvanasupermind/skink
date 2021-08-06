@@ -3,7 +3,7 @@
 
 Skink is a small, dynamically-typed programming language with C-style syntax. It emphasizes purely prototype-based code. 
 
-```cpp
+```java
 var Point = Object.new();
 Point.new = function (x, y) {
     var result = Object.new().setPrototype(Point);
@@ -17,7 +17,7 @@ Point.sum = function (this) {
 }
 
 var myPoint = Point.new(1, 1);
-System.print(myPoint.sum()); //2
+System.print(myPoint.sum()); //=> 2
 ```
 # Specification
 See [SPEC.md](SPEC.md).

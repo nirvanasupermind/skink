@@ -11,4 +11,4 @@ Point.sum = function (this) {
 }
 
 var myPoint = Point.new(1, 1);
-System.print(myPoint.sum()); //2
+System.print(myPoint.sum()); //=> 2
