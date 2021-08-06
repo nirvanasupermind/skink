@@ -10,6 +10,7 @@ Point.new = function (x, y) {
     result.setPrototype(Point);
     result.x = x;
     result.y = y;
+    
     return result;
 }
 
