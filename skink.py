@@ -2569,6 +2569,18 @@ def execute_float_cos(pos_start, pos_end, exec_ctx):
 
     return res.success_return(to_skink_number(np.cos(this.value)))
 
+def execute_float_tan(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, Float):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be float',
+            exec_ctx
+        ))
+
+    return res.success_return(to_skink_number(np.tan(this.value)))
+
 def execute_float_random(pos_start, pos_end, exec_ctx):
     res = RTResult()
     return res.success_return(Float(np.random.rand()))
@@ -2624,6 +2636,7 @@ int_new =  BuiltInFunction('new', execute_int_new, [])
 float_new =  BuiltInFunction('new', execute_float_new, [])
 float_sin =  BuiltInFunction('sin', execute_float_sin, ['this'])
 float_cos =  BuiltInFunction('cos', execute_float_cos, ['this'])
+float_tan =  BuiltInFunction('tan', execute_float_tan, ['this'])
 float_random =  BuiltInFunction('random', execute_float_random, [])
 
 bool_new =  BuiltInFunction('new', execute_bool_new, [])
@@ -2671,6 +2684,7 @@ float_object.set('PI', Float(np.pi))
 float_object.set('new', float_new)
 float_object.set('sin', float_sin)
 float_object.set('cos', float_cos)
+float_object.set('tan', float_tan)
 float_object.set('random', float_random)
 
 bool_object.set('new', bool_new)
