@@ -1,9 +1,14 @@
-function fib(n) {
-    if(n <= 1) {
-        return 1;
-    } else {
-        return fib(n - 1) + fib(n - 2);
-    }
+var Point = Object.new();
+Point.new = function (x, y) {
+    var result = Object.new().setPrototype(Point);
+    result.x = x;
+    result.y = y;
+    return result;
 }
 
-System.print(fib(7)); //21
+Point.sum = function (this) {
+    return this.x + this.y;
+}
+
+var myPoint = Point.new(1, 1);
+System.print(myPoint.sum()); //2

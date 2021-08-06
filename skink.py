@@ -15,7 +15,7 @@ DIGITS = '0123456789'
 LETTERS = string.ascii_letters + '_'
 LETTERS_DIGITS = LETTERS + DIGITS
 NEWLINES = '\n\r'
-DEFAULT_MAX_DEPTH = 6
+DEFAULT_MAX_DEPTH = 500
 
 #######################################
 # UTILITY FUNCTIONS
@@ -1489,12 +1489,16 @@ class RTResult:
 #######################################
 class Object:
     def __init__(self, prototype=None):
-        self.slots = {}
+        if not prototype: prototype = self
+
+        self.keys = []
+        self.values = []
         self.prototype = prototype
         self.uuid = uuid.uuid4()
 
         self.set_pos()
         self.set_context()
+        self.set_name()
 
     def set_pos(self, pos_start=None, pos_end=None):
         self.pos_start = pos_start
@@ -1505,21 +1509,29 @@ class Object:
         if not (hasattr(self, 'context') and self.context):
             self.context = context
         return self
+    
+    def set_name(self, name='<anonymous>'):
+        self.name = name
+        return self
         
-    def get(self, name):
-        name = str(name)
-        value = self.slots.get(name, None)
-        if value == None and self.prototype:
-            return self.prototype.get(name)
-        return value
+    def get(self, key, depth_decr=DEFAULT_MAX_DEPTH, ignore_prototype=False):
+        if depth_decr < 0: return
 
-    def set(self, name, value):
-        name = str(name)
-        self.slots[name] = value
+        key = str(key)
+        if key in self.keys:
+                return self.values[self.keys.index(key)]
+        else:
+            if self.prototype and (not ignore_prototype):
+                return self.prototype.get(key, depth_decr-1, ignore_prototype)
 
-    def remove(self, name):
-        del self.slots[name]
-
+    def set(self, key, value):
+        key = str(key)
+        if key in self.keys:
+            self.values[self.keys.index(key)] = value
+        else:
+            self.keys.append(key)
+            self.values.append(value)
+            
     def added_to(self, other):
         return None, self.illegal_operation(other)
 
@@ -1590,36 +1602,10 @@ class Object:
             'illegal operation',
             self.context
         )
-    
-    def __repr__(self, depth_decr=DEFAULT_MAX_DEPTH):
-        keys = list(self.slots.keys())
-        values = list(self.slots.values())
 
-        if len(keys) == 0: return '{}'
-        if depth_decr < 0:
-            return '{...}'
+    def __repr__(self):
+        return f'{self.prototype.name}@{format(hash(self.uuid), "x")}'
 
-
-        result = '{'
-        for i in range(0, len(keys)-1):
-            key = keys[i]
-            value = values[i]
-
-            use_depth_decr = type(value) in (
-                Object, 
-            ) 
-
-            value_str = value.__repr__(depth_decr - 1) if use_depth_decr else str(value)
-
-            result += f'{key}: {value_str}, ' 
-        
-        key = keys[-1]
-        value = values[-1]
-
-        value_str = value.__repr__(depth_decr - 1) if type(value) == Object else str(value)
-
-        result += f'{key}: {value_str}}}' 
-        return result
 
 class Null(Object):
     def __init__(self):
@@ -1949,7 +1935,7 @@ class Tuple(Object):
 class BaseFunction(Object):
     def __init__(self, name):
         super().__init__(function_object)
-        self.name = name or '<anonymous>'
+        self.set_name(name or '<anonymous>')
 
     def generate_new_context(self):
         new_context = Context(self.name, self.context, self.pos_start)
@@ -2024,17 +2010,16 @@ class BuiltInFunction(BaseFunction):
 #######################################
 # OBJECTS
 #######################################
-object_object = Object()
-null_object = Object(object_object)
-int_object = Object(object_object)
-float_object = Object(object_object)
-bool_object = Object(object_object)
-string_object = Object(object_object)
-list_object = Object(object_object)
-tuple_object = Object(object_object)
-function_object = Object(object_object)
-system_object = Object(object_object)
-math_object = Object(object_object)
+object_object = Object().set_name('Object')
+null_object = Object(object_object).set_name('Null')
+int_object = Object(object_object).set_name('Int')
+float_object = Object(object_object).set_name('Float')
+bool_object = Object(object_object).set_name('Bool')
+string_object = Object(object_object).set_name('String')
+list_object = Object(object_object).set_name('List')
+tuple_object = Object(object_object).set_name('Tuple')
+function_object = Object(object_object).set_name('Function')
+system_object = Object(object_object).set_name('System')
 
 #######################################
 # CONTEXT
@@ -2136,7 +2121,7 @@ class Interpreter:
     def visit_VarAssignNode(self, node, context):
         res = RTResult()
         var_name = node.var_name_tok.value
-        old_value = context.symbol_table.object.slots.get(var_name, None)
+        old_value = context.symbol_table.object.get(var_name, ignore_prototype=True)
 
         if old_value:
             return res.failure(RTError(
@@ -2148,7 +2133,7 @@ class Interpreter:
         value = res.register(self.visit(node.value_node, context))
         if res.error: return res
 
-        context.symbol_table.object.set(var_name, value)
+        context.symbol_table.object.set(var_name, value.set_name(var_name))
         return res.success(value)
           
     def visit_StatementsNode(self, node, context):
@@ -2441,7 +2426,7 @@ class Interpreter:
             
 
         if node.var_name_tok:
-            old_value = context.symbol_table.object.slots.get(func_name, None)
+            old_value = context.symbol_table.object.get(func_name, ignore_prototype=True)
 
             if old_value:
                 return res.failure(RTError(
@@ -2522,6 +2507,98 @@ class Interpreter:
 #######################################
 # BUILT-IN FUNCTIONS
 #######################################
+def execute_object_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Object(object_object))
+
+def execute_object_getPrototype(pos_start, pos_end, exec_ctx):
+    this = exec_ctx.symbol_table.object.get('this')
+    # print('getPrototype')
+
+    return RTResult().success_return(this.prototype)
+
+def execute_object_setPrototype(pos_start, pos_end, exec_ctx):
+    this = exec_ctx.symbol_table.object.get('this')
+    prototype = exec_ctx.symbol_table.object.get('prototype')
+
+    this.prototype = prototype
+
+    return RTResult().success_return(this)
+
+def execute_object_toString(pos_start, pos_end, exec_ctx):
+    this = exec_ctx.symbol_table.object.get('this')
+    return RTResult().success_return(String(str(this)))
+
+def execute_object_hashCode(pos_start, pos_end, exec_ctx):
+    this = exec_ctx.symbol_table.object.get('this')
+    return RTResult().success_return(Int(hash(this.uuid)))
+
+
+
+def execute_null_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Null())
+
+
+def execute_int_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Int(0))
+
+
+def execute_float_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Float(0.0))
+
+def execute_float_sin(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, Float):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be float',
+            exec_ctx
+        ))
+
+    return res.success_return(to_skink_number(np.sin(this.value)))
+
+def execute_float_cos(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, Float):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be float',
+            exec_ctx
+        ))
+
+    return res.success_return(to_skink_number(np.cos(this.value)))
+
+def execute_float_random(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    return res.success_return(Float(np.random.rand()))
+
+
+def execute_bool_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Bool(False))
+
+
+def execute_string_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(String(''))
+
+
+def execute_list_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(List([]))
+
+
+def execute_tuple_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Tuple(()))
+
+
+def execute_function_new(pos_start, pos_end, exec_ctx):
+    def execute(pos_start, pos_end, exec_ctx):
+        return RTResult().success(Null())
+
+    result = BuiltInFunction('<anonymous>', execute, [])
+
+    return RTResult().success_return(result)
+
+
 def execute_system_print(pos_start, pos_end, exec_ctx):
     print(str(exec_ctx.symbol_table.object.get('value')))
     return RTResult().success_return(Null())
@@ -2534,78 +2611,34 @@ def execute_system_prompt(pos_start, pos_end, exec_ctx):
     result = input()
     return RTResult().success_return(String(result))
 
-def execute_object_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Object(object_object))
+object_new =  BuiltInFunction('new', execute_object_new, [])
+object_getPrototype =  BuiltInFunction('getPrototype', execute_object_getPrototype, ['this'])
+object_setPrototype =  BuiltInFunction('setPrototype', execute_object_setPrototype, ['this', 'prototype'])
+object_toString =  BuiltInFunction('toString', execute_object_toString, ['this'])
+object_hashCode =  BuiltInFunction('hashCode', execute_object_hashCode, ['this'])
 
-def execute_null_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Null())
+null_new =  BuiltInFunction('new', execute_null_new, [])
 
-def execute_int_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Int(0))
+int_new =  BuiltInFunction('new', execute_int_new, [])
 
-def execute_float_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Float(0.0))
+float_new =  BuiltInFunction('new', execute_float_new, [])
+float_sin =  BuiltInFunction('sin', execute_float_sin, ['this'])
+float_cos =  BuiltInFunction('cos', execute_float_cos, ['this'])
+float_random =  BuiltInFunction('random', execute_float_random, [])
 
-def execute_float_sin(pos_start, pos_end, exec_ctx):
-    res = RTResult()
-    this = exec_ctx.symbol_table.object.get('this')
-    if not isinstance(this, (Float, )):
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'first argument must be float',
-            exec_ctx
-        ))
+bool_new =  BuiltInFunction('new', execute_bool_new, [])
 
-    return res.success_return(to_skink_number(np.sin(this.value)))
+string_new =  BuiltInFunction('new', execute_string_new, [])
 
-def execute_float_cos(pos_start, pos_end, exec_ctx):
-    res = RTResult()
-    this = exec_ctx.symbol_table.object.get('this')
-    if not isinstance(this, (Float, )):
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'first argument must be float',
-            exec_ctx
-        ))
+list_new =  BuiltInFunction('new', execute_list_new, [])
 
-    return res.success_return(to_skink_number(np.cos(this.value)))
+tuple_new =  BuiltInFunction('new', execute_tuple_new, [])
 
-def execute_bool_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Bool(False))
-
-def execute_string_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(String(''))
-
-def execute_list_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(List([]))
-
-def execute_tuple_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Tuple(()))
-
-def execute_function_new(pos_start, pos_end, exec_ctx):
-    def execute(pos_start, pos_end, exec_ctx):
-        return RTResult().success(Null())
-
-    result = BuiltInFunction('<anonymous>', execute, [])
-
-    return RTResult().success_return(result)
+function_new =  BuiltInFunction('new', execute_function_new, [])
 
 system_print = BuiltInFunction('print', execute_system_print, ['value'])
 system_write = BuiltInFunction('write', execute_system_write, ['value'])
 system_prompt = BuiltInFunction('prompt', execute_system_prompt, [])
-
-object_new =  BuiltInFunction('new', execute_object_new, [])
-null_new =  BuiltInFunction('new', execute_null_new, [])
-int_new =  BuiltInFunction('new', execute_int_new, [])
-float_new =  BuiltInFunction('new', execute_float_new, [])
-float_sin =  BuiltInFunction('sin', execute_float_sin, ['this'])
-float_cos =  BuiltInFunction('cos', execute_float_cos, ['this'])
-bool_new =  BuiltInFunction('new', execute_bool_new, [])
-string_new =  BuiltInFunction('new', execute_string_new, [])
-list_new =  BuiltInFunction('new', execute_list_new, [])
-tuple_new =  BuiltInFunction('new', execute_tuple_new, [])
-function_new =  BuiltInFunction('new', execute_function_new, [])
-
 #######################################
 # RUN
 #######################################
@@ -2624,6 +2657,10 @@ global_symbol_table.object.set('Function', function_object)
 global_symbol_table.object.set('System', system_object)
 
 object_object.set('new', object_new)
+object_object.set('getPrototype', object_getPrototype)
+object_object.set('setPrototype', object_setPrototype)
+object_object.set('toString', object_toString)
+object_object.set('hashCode', object_hashCode)
 
 null_object.set('new', null_new)
 
@@ -2634,6 +2671,7 @@ float_object.set('PI', Float(np.pi))
 float_object.set('new', float_new)
 float_object.set('sin', float_sin)
 float_object.set('cos', float_cos)
+float_object.set('random', float_random)
 
 bool_object.set('new', bool_new)
 
