@@ -6,7 +6,8 @@ Skink is a small, dynamically-typed programming language with C-style syntax. It
 ```java
 var Point = Object.new();
 Point.new = function (x, y) {
-    var result = Object.new().setPrototype(Point);
+    var result = Object.new()
+    result.setPrototype(Point);
     result.x = x;
     result.y = y;
     return result;
