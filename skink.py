@@ -2638,6 +2638,26 @@ def execute_int_toRadix(pos_start, pos_end, exec_ctx):
     
     return res.success_return(String(to_base(this.value, radix.value)))
 
+def execute_int_parseInt(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    str = exec_ctx.symbol_table.object.get('str')
+    if not isinstance(str, String):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be string',
+            exec_ctx
+        ))
+
+    try:
+        return res.success_return(Int(np.int64(np.clip(int(str.value), I64_MIN_VALUE, I64_MAX_VALUE))))
+    except ValueError:
+        return res.failure(RTError(
+            pos_start, pos_end,
+            f'cannot convert {str.value} to an int',
+            exec_ctx  
+        ))
+
+
 
 def execute_float_new(pos_start, pos_end, exec_ctx):
     return RTResult().success_return(Float(0.0))
@@ -2665,6 +2685,26 @@ def execute_float_floatValue(pos_start, pos_end, exec_ctx):
         ))
 
     return res.success_return(this)
+
+def execute_float_parseFloat(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    str = exec_ctx.symbol_table.object.get('str')
+    if not isinstance(str, String):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be string',
+            exec_ctx
+        ))
+
+    try:
+        return res.success_return(Float(float(str.value)))
+    except ValueError:
+        return res.failure(RTError(
+            pos_start, pos_end,
+            f'cannot {str.value} to float',
+            exec_ctx  
+        ))
+
 
 
 def execute_bool_new(pos_start, pos_end, exec_ctx):
@@ -2840,6 +2880,29 @@ def execute_string_toUpperCase(pos_start, pos_end, exec_ctx):
 
 def execute_list_new(pos_start, pos_end, exec_ctx):
     return RTResult().success_return(List([]))
+
+def execute_list_add(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    element = exec_ctx.symbol_table.object.get('element')
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be list',
+            exec_ctx
+        ))
+
+    this.value.append(element)
+
+    return res.success_return(Null())
+
+def execute_list_clear(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+
+    this.value.clear()
+
+    return res.success_return(Null())
 
 
 def execute_tuple_new(pos_start, pos_end, exec_ctx):
@@ -3133,10 +3196,12 @@ int_new = BuiltInFunction('new', execute_int_new, [])
 int_intValue = BuiltInFunction('intValue', execute_int_intValue, ['this'])
 int_floatValue = BuiltInFunction('floatValue', execute_int_floatValue, ['this'])
 int_toRadix = BuiltInFunction('toRadix', execute_int_toRadix, ['this', 'radix'])
+int_parseInt = BuiltInFunction('parseInt', execute_int_parseInt, ['str'])
 
 float_new = BuiltInFunction('new', execute_float_new, [])
 float_intValue = BuiltInFunction('intValue', execute_float_intValue, ['this'])
 float_floatValue = BuiltInFunction('floatValue', execute_float_floatValue, ['this'])
+float_parseFloat = BuiltInFunction('parseFloat', execute_float_parseFloat, ['str'])
 
 bool_new = BuiltInFunction('new', execute_bool_new, [])
 bool_intValue = BuiltInFunction('intValue', execute_bool_intValue, ['this'])
@@ -3153,6 +3218,8 @@ string_toUpperCase = BuiltInFunction('toUpperCase', execute_string_toUpperCase, 
 
 
 list_new = BuiltInFunction('new', execute_list_new, [])
+list_add = BuiltInFunction('add', execute_list_add, ['this', 'element'])
+list_clear = BuiltInFunction('clear', execute_list_clear, ['this'])
 
 tuple_new = BuiltInFunction('new', execute_tuple_new, [])
 
@@ -3215,12 +3282,14 @@ int_object.set('new', int_new)
 int_object.set('intValue', int_intValue)
 int_object.set('floatValue', int_floatValue)
 int_object.set('toRadix', int_toRadix)
+int_object.set('parseInt', int_parseInt)
 
 float_object.set('MIN_VALUE', Float(FLOAT_MIN_VALUE))
 float_object.set('MAX_VALUE', Float(FLOAT_MAX_VALUE))
 float_object.set('new', float_new)
 float_object.set('intValue', float_intValue)
 float_object.set('floatValue', float_floatValue)
+float_object.set('parseFloat', float_parseFloat)
 
 bool_object.set('TRUE', Bool(True))
 bool_object.set('FALSE', Bool(False))
@@ -3238,6 +3307,8 @@ string_object.set('toLowerCase', string_toLowerCase)
 string_object.set('toUpperCase', string_toUpperCase)
 
 list_object.set('new', list_new)
+list_object.set('add', list_add)
+list_object.set('clear', list_clear)
 
 tuple_object.set('new', tuple_new)
 
