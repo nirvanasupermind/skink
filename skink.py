@@ -41,6 +41,10 @@ def to_base(s, b):
         s//= b
     return res[::-1] or "0"
 
+# taken from https://stackoverflow.com/questions/25488148/what-is-the-python-equivalent-of-javascripts-array-prototype-some
+def some(list_, pred):
+    return any(pred(i) for i in list_) #booleanize the values, and pass them to any
+
 #######################################
 # ERRORS
 #######################################
@@ -165,7 +169,7 @@ TT_BITXOREQ = 'BITXOREQ'
 TT_NEWLINE  = 'NEWLINE'
 TT_EOF      = 'EOF'
 KEYWORDS = [
-    'null',
+    'nil',
     'true',
     'false',
     'var',
@@ -504,7 +508,7 @@ class Lexer:
 #######################################
 # NODES
 #######################################
-class NullNode:
+class NilNode:
     def __init__(self, tok):
         self.tok = tok
         self.pos_start = tok.pos_start
@@ -772,10 +776,10 @@ class Parser:
             if res.error: return res
             return res.success(UnaryOpNode(tok, factor))
         
-        elif tok.matches(TT_KEYWORD, 'null'):
+        elif tok.matches(TT_KEYWORD, 'nil'):
             res.register_advancement()
             self.advance()
-            return res.success(NullNode(tok))
+            return res.success(NilNode(tok))
 
         elif tok.type in (TT_INT, TT_FLOAT):
             res.register_advancement()
@@ -980,7 +984,7 @@ class Parser:
             res.register_advancement()
             self.advance()
 
-            statements = NullNode(tok)
+            statements = NilNode(tok)
         else:
             statements = res.register(self.statements())
             if res.error: return res
@@ -1038,7 +1042,7 @@ class Parser:
             res.register_advancement()
             self.advance()
 
-            statements = NullNode(tok)
+            statements = NilNode(tok)
         else:
             statements = res.register(self.statements())
 
@@ -1340,7 +1344,7 @@ class Parser:
             tok = self.current_tok
             res.register_advancement()
             self.advance()
-            statements = NullNode(tok)
+            statements = NilNode(tok)
         else:
             statements = res.register(self.statements())
 
@@ -1396,7 +1400,7 @@ class Parser:
             self.advance()
         
         if self.current_tok.type == TT_EOF:
-            statements.append(NullNode(self.current_tok))
+            statements.append(NilNode(self.current_tok))
         else:
             statement = res.register(self.expr())
             if res.error: return res
@@ -1637,15 +1641,15 @@ class Object:
         return f'{self.prototype.name}@{format(hash(self.uuid), "x")}'
 
 
-class Null(Object):
+class Nil(Object):
     def __init__(self):
-        super().__init__(null_object)
+        super().__init__(nil_object)
     
     def is_true(self):
         return False
         
     def __repr__(self):
-        return 'null'
+        return 'nil'
         
 class Int(Object): 
     def __init__(self, value):
@@ -1933,34 +1937,34 @@ class String(Object):
         return self.value
 
 class List(Object):
-    def __init__(self, value):
+    def __init__(self, elements):
         super().__init__(list_object)
-        self.value = value
+        self.elements = elements
 
     def added_to(self, other):
         if isinstance(other, List):
-            result = self.value + other.value
+            result = self.elements + other.elements
             return List(result).set_context(self.context), None
         else:
             return None, Object.illegal_operation(self, other)
 
     def __repr__(self):
-        return repr(self.value)
+        return str(self.elements)
 
 class Tuple(Object):
-    def __init__(self, value):
+    def __init__(self, elements):
         super().__init__(tuple_object)
-        self.value = value
+        self.elements = elements
 
     def added_to(self, other):
         if isinstance(other, Tuple):
-            result = self.value + other.value
+            result = self.elements + other.elements
             return Tuple(result).set_context(self.context), None
         else:
             return None, Object.illegal_operation(self, other)
 
     def __repr__(self):
-        return repr(self.value)
+        return repr(self.elements)
 
 class BaseFunction(Object):
     def __init__(self, name):
@@ -1974,7 +1978,7 @@ class BaseFunction(Object):
     
     def normalize_args(self, pos_start, pos_end, arg_names, args):
         while len(args) < len(arg_names):
-            args.append(Null().set_pos(pos_start, pos_end))
+            args.append(Nil().set_pos(pos_start, pos_end))
         return args
     
     def populate_args(self, arg_names, args, exec_ctx):
@@ -2039,7 +2043,7 @@ class BuiltInFunction(BaseFunction):
 # OBJECTS
 #######################################
 object_object = Object().set_name('Object')
-null_object = Object(object_object).set_name('Null')
+nil_object = Object(object_object).set_name('Nil')
 int_object = Object(object_object).set_name('Int')
 float_object = Object(object_object).set_name('Float')
 bool_object = Object(object_object).set_name('Bool')
@@ -2082,9 +2086,9 @@ class Interpreter:
     def no_visit_method(self, node, context):
         raise Exception(f'No visit_{type(node).__name__} method found')
 
-    def visit_NullNode(self, node, context):
+    def visit_NilNode(self, node, context):
         return RTResult().success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
     def visit_NumberNode(self, node, context):
@@ -2380,7 +2384,7 @@ class Interpreter:
 
             return res.success(if_case)
         else:
-            return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
+            return res.success(Nil().set_context(context).set_pos(node.pos_start, node.pos_end))
 
     def visit_IfElseNode(self, node, context): 
         if_context = Context('if statement', context, node.pos_start)
@@ -2426,7 +2430,7 @@ class Interpreter:
             if res.error: return res
         
         return res.success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
     
     def visit_WhileNode(self, node, context):
@@ -2444,7 +2448,7 @@ class Interpreter:
             if res.error: return res
 
         return res.success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
 
     def visit_FuncDefNode(self, node, context):
@@ -2491,7 +2495,7 @@ class Interpreter:
         return_value = res.register(value_to_call.execute(args, node.pos_start, node.pos_end))
         if res.error: return res
         if not res.func_return_value:
-            return res.success(Null().set_context(context).set_pos(node.pos_start, node.pos_end))
+            return res.success(Nil().set_context(context).set_pos(node.pos_start, node.pos_end))
         
         return res.success(res.func_return_value.set_context(context).set_pos(node.pos_start, node.pos_end))
 
@@ -2505,7 +2509,7 @@ class Interpreter:
         result = obj.get(prop)
         if result == None:
             return res.success(
-                Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+                Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
             )
         else:
             return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
@@ -2521,7 +2525,7 @@ class Interpreter:
         result = obj.get(prop)
         if result == None:
             return res.success(
-                Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+                Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
             )
         else:
             return res.success(result.set_context(context).set_pos(node.pos_start, node.pos_end))
@@ -2532,7 +2536,7 @@ class Interpreter:
         if res.error: return res
 
         return res.success_return(expr).success(
-            Null().set_context(context).set_pos(node.pos_start, node.pos_end)
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )    
 
 #######################################
@@ -2565,15 +2569,15 @@ def execute_object_hashCode(pos_start, pos_end, exec_ctx):
 
 def execute_object_getKeys(pos_start, pos_end, exec_ctx):
     this = exec_ctx.symbol_table.object.get('this')
-    return RTResult().success_return(List([String(str(key)) for key in this.keys]))
+    return RTResult().success_return(List([String(str(key)) for key in this.keys][:]))
 
 def execute_object_getValues(pos_start, pos_end, exec_ctx):
     this = exec_ctx.symbol_table.object.get('this')
-    return RTResult().success_return(List(this.values))
+    return RTResult().success_return(List(this.values[:]))
 
 
-def execute_null_new(pos_start, pos_end, exec_ctx):
-    return RTResult().success_return(Null())
+def execute_nil_new(pos_start, pos_end, exec_ctx):
+    return RTResult().success_return(Nil())
 
 
 def execute_int_new(pos_start, pos_end, exec_ctx):
@@ -2603,59 +2607,20 @@ def execute_int_floatValue(pos_start, pos_end, exec_ctx):
 
     return res.success_return(Float(float(this.value)))
 
-def execute_int_toRadix(pos_start, pos_end, exec_ctx):
-    res = RTResult()
-    this = exec_ctx.symbol_table.object.get('this')
-    radix = exec_ctx.symbol_table.object.get('radix')
-
-    if not isinstance(this, Int):
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'first argument must be int',
-            exec_ctx
-        ))
-
-    if not isinstance(radix, Int):
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'second argument must be int',
-            exec_ctx
-        ))
-    
-    if radix.value < 2:
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'radix cannot be less than 2',
-            exec_ctx
-        ))
-    
-    if radix.value > 36:
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'radix cannot be greater than 36',
-            exec_ctx
-        ))
-    
-    return res.success_return(String(to_base(this.value, radix.value)))
-
 def execute_int_parseInt(pos_start, pos_end, exec_ctx):
     res = RTResult()
     str = exec_ctx.symbol_table.object.get('str')
     if not isinstance(str, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
     try:
         return res.success_return(Int(np.int64(np.clip(int(str.value), I64_MIN_VALUE, I64_MAX_VALUE))))
     except ValueError:
-        return res.failure(RTError(
-            pos_start, pos_end,
-            f'cannot convert {str.value} to an int',
-            exec_ctx  
-        ))
+        return res.success_return(Nil())
 
 
 
@@ -2692,18 +2657,14 @@ def execute_float_parseFloat(pos_start, pos_end, exec_ctx):
     if not isinstance(str, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
     try:
         return res.success_return(Float(float(str.value)))
     except ValueError:
-        return res.failure(RTError(
-            pos_start, pos_end,
-            f'cannot {str.value} to float',
-            exec_ctx  
-        ))
+        return res.success_return(Nil())
 
 
 
@@ -2716,7 +2677,7 @@ def execute_bool_intValue(pos_start, pos_end, exec_ctx):
     if not isinstance(this, Bool):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be bool',
+            'first argument must be a Bool',
             exec_ctx
         ))
 
@@ -2728,7 +2689,7 @@ def execute_bool_floatValue(pos_start, pos_end, exec_ctx):
     if not isinstance(this, Bool):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be bool',
+            'first argument must be a Bool',
             exec_ctx
         ))
 
@@ -2744,11 +2705,11 @@ def execute_string_length(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
-    return RTResult().success_return(Int(np.int64(len(this.value))))
+    return RTResult().success_return(Int(np.int64(len(this.elements))))
 
 def execute_string_charAt(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -2757,21 +2718,21 @@ def execute_string_charAt(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
     if not isinstance(index, Int):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be int',
+            'second argument must be an Int',
             exec_ctx
         ))
 
     try:
         return res.success_return(String(this.value[index.value]))
     except IndexError:
-        return res.success_return(Null())
+        return res.success_return(Nil())
 
 def execute_string_indexOf(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -2780,21 +2741,21 @@ def execute_string_indexOf(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
     if not isinstance(str, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be string',
+            'second argument must be a String',
             exec_ctx
         ))
 
     try:
         return res.success_return(Int(this.value.index(str.value)))
     except ValueError:
-        return res.success_return(Null())
+        return res.success_return(Nil())
 
 def execute_string_lastIndexOf(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -2803,21 +2764,21 @@ def execute_string_lastIndexOf(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
     if not isinstance(str, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be string',
+            'second argument must be a String',
             exec_ctx
         ))
 
     try:
         return res.success_return(Int(this.value.rindex(str.value)))
     except ValueError:
-        return res.success_return(Null())
+        return res.success_return(Nil())
 
 def execute_string_substring(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -2828,24 +2789,24 @@ def execute_string_substring(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
     if not isinstance(begin_index, Int):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be int',
+            'second argument must be an Int',
             exec_ctx
         ))
 
-    if isinstance(end_index, Null):
+    if isinstance(end_index, Nil):
             return res.success_return(String(this.value[begin_index.value:]))
 
     if not isinstance(end_index, Int):
         return res.failure(RTError(
             pos_start, pos_end,
-            'third argument must be int',
+            'third argument must be an Int or Nil',
             exec_ctx
         ))
 
@@ -2858,7 +2819,7 @@ def execute_string_toLowerCase(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
@@ -2871,7 +2832,7 @@ def execute_string_toUpperCase(pos_start, pos_end, exec_ctx):
     if not isinstance(this, String):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be string',
+            'first argument must be a String',
             exec_ctx
         ))
 
@@ -2888,21 +2849,127 @@ def execute_list_add(pos_start, pos_end, exec_ctx):
     if not isinstance(this, List):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be list',
+            'first argument must be a List',
             exec_ctx
         ))
 
-    this.value.append(element)
+    this.elements.append(element)
 
-    return res.success_return(Null())
+    return res.success_return(Nil())
 
 def execute_list_clear(pos_start, pos_end, exec_ctx):
     res = RTResult()
     this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
 
-    this.value.clear()
+    this.elements.clear()
 
-    return res.success_return(Null())
+    return res.success_return(Nil())
+
+def execute_list_get(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    index = exec_ctx.symbol_table.object.get('index')
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
+
+    if not isinstance(index, Int):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'second argument must be an Int',
+            exec_ctx
+        ))    
+
+    try:
+        return res.success_return(this.value[index.value])
+    except IndexError:
+        return res.success_return(Nil())
+
+def execute_list_isEmpty(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
+
+    return res.success_return(Bool(len(this.elements) == 0))
+
+def execute_list_remove(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    index = exec_ctx.symbol_table.object.get('index')
+
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
+
+    if not isinstance(index, Int):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'second argument must be an Int',
+            exec_ctx
+        ))
+
+    result = Nil()
+    try:
+        result = this.value[index.value]
+    except IndexError: pass
+
+    try:
+        this.elements.pop(index.value)
+    except IndexError: pass
+    
+    return res.success(result)
+
+def execute_list_set(pos_start, pos_end, exec_ctx):
+    # print('HELLO?')
+
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    index = exec_ctx.symbol_table.object.get('index')
+    element = exec_ctx.symbol_table.object.get('element')
+
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
+
+    if not isinstance(index, Int):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'second argument must be an Int',
+            exec_ctx
+        ))
+
+
+    try:
+        this.elements[index.value] = element
+    except IndexError: 
+        for i in range((index.value + 1) - (len(this.elements))):
+            this.elements.append(Nil())
+        
+        # print(f'*** {len(this.elements)}')
+        # print(index.value)
+        this.elements[index.value] = element
+    
+    return res.success(element)
 
 
 def execute_tuple_new(pos_start, pos_end, exec_ctx):
@@ -2911,7 +2978,7 @@ def execute_tuple_new(pos_start, pos_end, exec_ctx):
 
 def execute_function_new(pos_start, pos_end, exec_ctx):
     def execute(pos_start, pos_end, exec_ctx):
-        return RTResult().success(Null())
+        return RTResult().success(Nil())
 
     result = BuiltInFunction('<anonymous>', execute, [])
 
@@ -2920,11 +2987,11 @@ def execute_function_new(pos_start, pos_end, exec_ctx):
 
 def execute_system_print(pos_start, pos_end, exec_ctx):
     print(str(exec_ctx.symbol_table.object.get('data')))
-    return RTResult().success_return(Null())
+    return RTResult().success_return(Nil())
 
 def execute_system_write(pos_start, pos_end, exec_ctx):
     print(str(exec_ctx.symbol_table.object.get('data')), end='')
-    return RTResult().success_return(Null())
+    return RTResult().success_return(Nil())
 
 def execute_system_prompt(pos_start, pos_end, exec_ctx):
     result = input()
@@ -2937,7 +3004,7 @@ def execute_math_sin(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -2949,7 +3016,7 @@ def execute_math_cos(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -2961,7 +3028,7 @@ def execute_math_tan(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -2973,7 +3040,7 @@ def execute_math_asin(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -2985,7 +3052,7 @@ def execute_math_acos(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -2997,7 +3064,7 @@ def execute_math_atan(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -3011,14 +3078,14 @@ def execute_math_atan2(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
     if not isinstance(b, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -3031,7 +3098,7 @@ def execute_math_exp(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -3044,7 +3111,7 @@ def execute_math_log(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -3057,7 +3124,7 @@ def execute_math_sqrt(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -3071,14 +3138,14 @@ def execute_math_pow(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
     if not isinstance(b, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be int or float',
+            'second argument must be an Int or Float',
             exec_ctx
         ))
 
@@ -3091,7 +3158,7 @@ def execute_math_ceil(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
@@ -3104,7 +3171,7 @@ def execute_math_floor(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
@@ -3117,7 +3184,7 @@ def execute_math_round(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
@@ -3134,7 +3201,7 @@ def execute_math_abs(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
@@ -3148,14 +3215,14 @@ def execute_math_min(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
     if not isinstance(b, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be int or float',
+            'second argument must be an Int or Float',
             exec_ctx
         ))
     
@@ -3169,14 +3236,14 @@ def execute_math_max(pos_start, pos_end, exec_ctx):
     if not isinstance(a, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int or float',
+            'first argument must be an Int or Float',
             exec_ctx
         ))
     
     if not isinstance(b, (Int, Float)):
         return res.failure(RTError(
             pos_start, pos_end,
-            'second argument must be int or float',
+            'second argument must be an Int or Float',
             exec_ctx
         ))
     
@@ -3190,12 +3257,12 @@ object_hashCode = BuiltInFunction('hashCode', execute_object_hashCode, ['this'])
 object_getKeys = BuiltInFunction('getKeys', execute_object_getKeys, ['this'])
 object_getValues = BuiltInFunction('getValues', execute_object_getValues, ['this'])
 
-null_new = BuiltInFunction('new', execute_null_new, [])
+nil_new = BuiltInFunction('new', execute_nil_new, [])
 
 int_new = BuiltInFunction('new', execute_int_new, [])
 int_intValue = BuiltInFunction('intValue', execute_int_intValue, ['this'])
 int_floatValue = BuiltInFunction('floatValue', execute_int_floatValue, ['this'])
-int_toRadix = BuiltInFunction('toRadix', execute_int_toRadix, ['this', 'radix'])
+# int_toBase = BuiltInFunction('toBase', execute_int_toBase, ['this', 'radix'])
 int_parseInt = BuiltInFunction('parseInt', execute_int_parseInt, ['str'])
 
 float_new = BuiltInFunction('new', execute_float_new, [])
@@ -3220,6 +3287,10 @@ string_toUpperCase = BuiltInFunction('toUpperCase', execute_string_toUpperCase, 
 list_new = BuiltInFunction('new', execute_list_new, [])
 list_add = BuiltInFunction('add', execute_list_add, ['this', 'element'])
 list_clear = BuiltInFunction('clear', execute_list_clear, ['this'])
+list_get = BuiltInFunction('get', execute_list_get, ['this', 'index'])
+list_isEmpty = BuiltInFunction('isEmpty', execute_list_isEmpty, ['this'])
+list_remove = BuiltInFunction('remove', execute_list_remove, ['this', 'index'])
+list_set = BuiltInFunction('set', execute_list_set, ['this', 'index', 'element'])
 
 tuple_new = BuiltInFunction('new', execute_tuple_new, [])
 
@@ -3255,7 +3326,7 @@ global_symbol_table = SymbolTable(Object(object_object))
 global_symbol_table.object.set('global', global_symbol_table.object)
 
 global_symbol_table.object.set('Object', object_object)
-global_symbol_table.object.set('Null', null_object)
+global_symbol_table.object.set('Nil', nil_object)
 global_symbol_table.object.set('Int', int_object)
 global_symbol_table.object.set('Float', float_object)
 global_symbol_table.object.set('Bool', bool_object)
@@ -3274,14 +3345,14 @@ object_object.set('hashCode', object_hashCode)
 object_object.set('getKeys', object_getKeys)
 object_object.set('getValues', object_getValues)
 
-null_object.set('new', null_new)
+nil_object.set('new', nil_new)
 
 int_object.set('MIN_VALUE', Int(I64_MIN_VALUE))
 int_object.set('MAX_VALUE', Int(I64_MAX_VALUE))
 int_object.set('new', int_new)
 int_object.set('intValue', int_intValue)
 int_object.set('floatValue', int_floatValue)
-int_object.set('toRadix', int_toRadix)
+# int_object.set('toBase', int_toBase)
 int_object.set('parseInt', int_parseInt)
 
 float_object.set('MIN_VALUE', Float(FLOAT_MIN_VALUE))
@@ -3309,6 +3380,12 @@ string_object.set('toUpperCase', string_toUpperCase)
 list_object.set('new', list_new)
 list_object.set('add', list_add)
 list_object.set('clear', list_clear)
+list_object.set('get', list_get)
+list_object.set('isEmpty', list_isEmpty)
+list_object.set('remove', list_remove)
+list_object.set('set', list_set)
+
+
 
 tuple_object.set('new', tuple_new)
 

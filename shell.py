@@ -21,4 +21,3 @@ def run_shell():
                 print(error.as_string())
             else: 
                 print(result)
-
