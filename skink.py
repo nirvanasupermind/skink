@@ -2589,7 +2589,7 @@ def execute_int_intValue(pos_start, pos_end, exec_ctx):
     if not isinstance(this, Int):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int',
+            'first argument must be an Int',
             exec_ctx
         ))
 
@@ -2601,7 +2601,7 @@ def execute_int_floatValue(pos_start, pos_end, exec_ctx):
     if not isinstance(this, Int):
         return res.failure(RTError(
             pos_start, pos_end,
-            'first argument must be int',
+            'first argument must be an Int',
             exec_ctx
         ))
 
@@ -2621,7 +2621,6 @@ def execute_int_parseInt(pos_start, pos_end, exec_ctx):
         return res.success_return(Int(np.int64(np.clip(int(str.value), I64_MIN_VALUE, I64_MAX_VALUE))))
     except ValueError:
         return res.success_return(Nil())
-
 
 
 def execute_float_new(pos_start, pos_end, exec_ctx):
@@ -2709,7 +2708,7 @@ def execute_string_length(pos_start, pos_end, exec_ctx):
             exec_ctx
         ))
 
-    return RTResult().success_return(Int(np.int64(len(this.elements))))
+    return RTResult().success_return(Int(np.int64(len(this.value))))
 
 def execute_string_charAt(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -2890,9 +2889,21 @@ def execute_list_get(pos_start, pos_end, exec_ctx):
         ))    
 
     try:
-        return res.success_return(this.value[index.value])
+        return res.success_return(this.elements[index.value])
     except IndexError:
         return res.success_return(Nil())
+
+def execute_list_length(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
+
+    return res.success_return(Int(len(this.elements)))
 
 def execute_list_isEmpty(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -2974,6 +2985,53 @@ def execute_list_set(pos_start, pos_end, exec_ctx):
 
 def execute_tuple_new(pos_start, pos_end, exec_ctx):
     return RTResult().success_return(Tuple(()))
+
+def execute_tuple_get(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    index = exec_ctx.symbol_table.object.get('index')
+    if not isinstance(this, Tuple):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a Tuple',
+            exec_ctx
+        ))
+
+    if not isinstance(index, Int):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'second argument must be an Int',
+            exec_ctx
+        ))    
+
+    try:
+        return res.success_return(this.elements[index.value])
+    except IndexError:
+        return res.success_return(Nil())
+
+def execute_tuple_length(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, Tuple):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a Tuple',
+            exec_ctx
+        ))
+
+    return res.success_return(Int(len(this.elements)))
+
+def execute_tuple_isEmpty(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, Tuple):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a Tuple',
+            exec_ctx
+        ))
+
+    return res.success_return(Bool(len(this.elements) == 0))
 
 
 def execute_function_new(pos_start, pos_end, exec_ctx):
@@ -3285,6 +3343,7 @@ string_toUpperCase = BuiltInFunction('toUpperCase', execute_string_toUpperCase, 
 
 
 list_new = BuiltInFunction('new', execute_list_new, [])
+list_length = BuiltInFunction('length', execute_list_length, ['this'])
 list_add = BuiltInFunction('add', execute_list_add, ['this', 'element'])
 list_clear = BuiltInFunction('clear', execute_list_clear, ['this'])
 list_get = BuiltInFunction('get', execute_list_get, ['this', 'index'])
@@ -3293,6 +3352,9 @@ list_remove = BuiltInFunction('remove', execute_list_remove, ['this', 'index'])
 list_set = BuiltInFunction('set', execute_list_set, ['this', 'index', 'element'])
 
 tuple_new = BuiltInFunction('new', execute_tuple_new, [])
+tuple_get = BuiltInFunction('get', execute_tuple_get, ['this', 'element'])
+tuple_length = BuiltInFunction('length', execute_tuple_length, ['this'])
+tuple_isEmpty = BuiltInFunction('isEmpty', execute_tuple_isEmpty, ['isEmpty'])
 
 function_new = BuiltInFunction('new', execute_function_new, [])
 
@@ -3381,13 +3443,15 @@ list_object.set('new', list_new)
 list_object.set('add', list_add)
 list_object.set('clear', list_clear)
 list_object.set('get', list_get)
+list_object.set('length', list_length)
 list_object.set('isEmpty', list_isEmpty)
 list_object.set('remove', list_remove)
 list_object.set('set', list_set)
 
-
-
 tuple_object.set('new', tuple_new)
+tuple_object.set('get', tuple_get)
+tuple_object.set('length', tuple_length)
+tuple_object.set('isEmpty', tuple_isEmpty)
 
 function_object.set('new', function_new)
 
