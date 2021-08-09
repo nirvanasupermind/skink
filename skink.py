@@ -136,6 +136,7 @@ TT_PLUS     = 'PLUS'
 TT_MINUS    = 'MINUS'
 TT_MUL      = 'MUL'
 TT_DIV      = 'DIV'
+TT_MOD      = 'MOD'
 TT_EQ       = 'EQ'
 TT_LPAREN   = 'LPAREN'
 TT_RPAREN   = 'RPAREN'
@@ -163,6 +164,7 @@ TT_PLUSEQ   = 'PLUSEQ'
 TT_MINUSEQ  = 'MINUSEQ'
 TT_MULEQ    = 'MULEQ'
 TT_DIVEQ    = 'DIVEQ'
+TT_MODEQ    = 'MODEQ'
 TT_BITANDEQ = 'BITANDEQ'
 TT_BITOREQ  = 'BITOREQ'
 TT_BITXOREQ = 'BITXOREQ'
@@ -247,6 +249,8 @@ class Lexer:
             elif self.current_char == '/':
                 tok = self.make_div()
                 if tok: tokens.append(tok)
+            elif self.current_char == '%':
+                tokens.append(self.make_mod())
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos.copy()))
                 self.advance()
@@ -414,6 +418,17 @@ class Lexer:
             self.advance()
             tok_type = TT_DIVEQ
 
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
+
+    def make_mod(self):
+        tok_type = TT_MOD
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_MODEQ
 
         return Token(tok_type, pos_start=pos_start, pos_end=self.pos.copy())
 
@@ -1264,7 +1279,7 @@ class Parser:
         return res.success(factor)
 
     def term(self):
-        return self.bin_op(self.call, (TT_MUL, TT_DIV))
+        return self.bin_op(self.call, (TT_MUL, TT_DIV, TT_MOD))
 
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -1556,38 +1571,96 @@ class Object:
             self.keys.append(key)
             self.values.append(value)
             
+    def overloaded_operation(self, other, func):
+        result = func.execute(
+            [self, other], other.pos_start, other.pos_end
+        )
+        
+        return result.func_return_value, result.error
+
     def added_to(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('plus') and isinstance(self.get('plus'), BaseFunction):
+            func = self.get('plus')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def subbed_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('minus') and isinstance(self.get('minus'), BaseFunction):
+            func = self.get('minus')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def multed_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('mul') and isinstance(self.get('mul'), BaseFunction):
+            func = self.get('mul')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def dived_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('div') and isinstance(self.get('div'), BaseFunction):
+            func = self.get('div')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
+
+    def modded_by(self, other):
+        if self.get('mod') and isinstance(self.get('mod'), BaseFunction):
+            func = self.get('mod')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def negated(self):
-        return None, self.illegal_operation()
+        if self.get('neg') and isinstance(self.get('neg'), BaseFunction):
+            func = self.get('neg')
+            return self.overloaded_operation(self, func)
+        else:
+            return None, self.illegal_operation()
 
     def get_comparison_eq(self, other):
-        return Bool(self.uuid == other.uuid), None
+        if self.get('eq') and isinstance(self.get('eq'), BaseFunction):
+            func = self.get('eq')
+            return self.overloaded_operation(other, func)
+        else:
+            return Bool(self.uuid == other.uuid), None
     
     def get_comparison_ne(self, other):
-        return Bool(self.uuid != other.uuid), None
+        if self.get('ne') and isinstance(self.get('ne'), BaseFunction):
+            func = self.get('ne')
+            return self.overloaded_operation(other, func)
+        else:
+            return Bool(self.uuid != other.uuid), None
     
     def get_comparison_lt(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('lt') and isinstance(self.get('lt'), BaseFunction):
+            func = self.get('lt')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def get_comparison_gt(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('gt') and isinstance(self.get('gt'), BaseFunction):
+            func = self.get('gt')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def get_comparison_lte(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('lte') and isinstance(self.get('lte'), BaseFunction):
+            func = self.get('lte')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
     
     def get_comparison_gte(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('gte') and isinstance(self.get('gte'), BaseFunction):
+            func = self.get('gte')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
     
     def is_(self, other):
         temp = self.prototype
@@ -1600,31 +1673,68 @@ class Object:
         return Bool(False), None
     
     def anded_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('and') and isinstance(self.get('and'), BaseFunction):
+            func = self.get('and')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def ored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('or') and isinstance(self.get('or'), BaseFunction):
+            func = self.get('or')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
     
     def xored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('xor') and isinstance(self.get('xor'), BaseFunction):
+            func = self.get('xor')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
 
     def notted(self):
-        return None, self.illegal_operation()
+        if self.get('not') and isinstance(self.get('not'), BaseFunction):
+            func = self.get('not')
+            return self.overloaded_operation(self, func)
+        else:
+            return None, self.illegal_operation()
     
     def bitanded_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('bitand') and isinstance(self.get('bitand'), BaseFunction):
+            func = self.get('bitand')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
     
     def bitored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('bitor') and isinstance(self.get('bitor'), BaseFunction):
+            func = self.get('bitor')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
     
     def bitxored_by(self, other):
-        return None, self.illegal_operation(other)
+        if self.get('bitxor') and isinstance(self.get('bitxor'), BaseFunction):
+            func = self.get('bitxor')
+            return self.overloaded_operation(other, func)
+        else:
+            return None, self.illegal_operation(other)
     
     def bitnotted(self):
-        return None, self.illegal_operation()
+        if self.get('bitnot') and isinstance(self.get('bitnot'), BaseFunction):
+            func = self.get('bitnot')
+            return self.overloaded_operation(self, func)
+        else:
+            return None, self.illegal_operation()
 
     def execute(self, args, pos_start, pos_end):
-        return RTResult().failure(self.illegal_operation())
+        if self.get('call') and isinstance(self.get('call'), BaseFunction):
+            func = self.get('call')
+            result = func.execute([self] + args, pos_start, pos_end)
+            return result
+        else:
+            return RTResult().failure(self.illegal_operation())
 
     def is_true(self):
         return True
@@ -1638,6 +1748,10 @@ class Object:
         )
 
     def __repr__(self):
+        if self.get('toString') and isinstance(self.get('toString'), BaseFunction) and not (self.get('toString').uuid == object_object.get('toString').uuid):
+            result = self.get('toString').execute([self], self.pos_start, self.pos_end)
+            return str(result.value)
+
         return f'{self.prototype.name}@{format(hash(self.uuid), "x")}'
 
 
@@ -1688,16 +1802,35 @@ class Int(Object):
         
     def dived_by(self, other): 
         if isinstance(other, (Int, Float)):
-            if repr(other) == '0':
+            if str(other.value) == '0':
                 return None, RTError(
                     other.pos_start, other.pos_end,
                     'integer division by zero',
                     self.context
                 )
-            elif repr(other) == '0.0':
+            elif str(other.value) == '0.0':
                 return Float(np.inf).set_context(self.context), None
             else:
                 result = self.value / other.value if isinstance(other.value, float) else self.value // other.value
+                if isinstance(result, np.int64):
+                    return Int(result).set_context(self.context), None
+                else:
+                    return Float(result).set_context(self.context), None
+        else:
+            return None, Object.illegal_operation(self, other)
+    
+    def modded_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            if str(other.value) == '0':
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'integer division by zero',
+                    self.context
+                )
+            elif str(other.value) == '0.0':
+                return Float(np.nan).set_context(self.context), None
+            else:
+                result = self.value % other.value
                 if isinstance(result, np.int64):
                     return Int(result).set_context(self.context), None
                 else:
@@ -1807,10 +1940,21 @@ class Float(Object):
     
     def dived_by(self, other): 
         if isinstance(other, (Int, Float)):
-            if repr(other) in ('0', '0.0'):
+            if str(other.value) in ('0', '0.0'):
                 return Float(np.inf).set_context(self.context), None
             else:
                 result = self.value / other.value
+                if isinstance(result, np.int64):
+                    return Int(result).set_context(self.context), None
+                else:
+                    return Float(result).set_context(self.context), None
+
+    def modded_by(self, other): 
+        if isinstance(other, (Int, Float)):
+            if str(other.value) in ('0', '0.0'):
+                return Float(np.nan).set_context(self.context), None
+            else:
+                result = self.value % other.value
                 if isinstance(result, np.int64):
                     return Int(result).set_context(self.context), None
                 else:
@@ -1964,7 +2108,7 @@ class Tuple(Object):
             return None, Object.illegal_operation(self, other)
 
     def __repr__(self):
-        return repr(self.elements)
+        return str(self.elements)
 
 class BaseFunction(Object):
     def __init__(self, name):
@@ -2257,6 +2401,8 @@ class Interpreter:
             result, error = left.multed_by(right)
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right)
+        elif node.op_tok.type == TT_MOD:
+            result, error = left.modded_by(right)
         elif node.op_tok.type == TT_EQ:      
             if isinstance(node.left_node, VarAccessNode):
                 var_name = node.left_node.var_name_tok.value
@@ -2294,7 +2440,6 @@ class Interpreter:
                     'invalid left-hand side in assignment',
                     context
                 ))
-
         elif node.op_tok.type == TT_EE:
             result, error = left.get_comparison_eq(right)
         elif node.op_tok.type == TT_NE:
@@ -2335,6 +2480,10 @@ class Interpreter:
             return res.success(result)
         elif node.op_tok.type == TT_DIVEQ:
             result = res.register(self.in_place_op(node, context, lambda x, y: x.dived_by(y)))
+            if res.error: return res
+            return res.success(result)
+        elif node.op_tok.type == TT_MODEQ:
+            result = res.register(self.in_place_op(node, context, lambda x, y: x.modded_by(y)))
             if res.error: return res
             return res.success(result)
         elif node.op_tok.type == TT_BITANDEQ:
