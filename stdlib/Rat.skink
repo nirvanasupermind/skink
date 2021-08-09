@@ -35,7 +35,7 @@ Rat.plus = function (this, that) {
 }
 
 Rat.uminus = function (this) {
-    System.print(this.n);
+    // System.print(this.n);
     return Rat.new(-this.n, this.d);
 }
 
