@@ -1977,8 +1977,10 @@ class BaseFunction(Object):
         return new_context
     
     def normalize_args(self, pos_start, pos_end, arg_names, args):
+        # print(self.name, args)
         while len(args) < len(arg_names):
             args.append(Nil().set_pos(pos_start, pos_end))
+
         return args
     
     def populate_args(self, arg_names, args, exec_ctx):
@@ -2893,18 +2895,6 @@ def execute_list_get(pos_start, pos_end, exec_ctx):
     except IndexError:
         return res.success_return(Nil())
 
-def execute_list_length(pos_start, pos_end, exec_ctx):
-    res = RTResult()
-    this = exec_ctx.symbol_table.object.get('this')
-    if not isinstance(this, List):
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'first argument must be a List',
-            exec_ctx
-        ))
-
-    return res.success_return(Int(len(this.elements)))
-
 def execute_list_isEmpty(pos_start, pos_end, exec_ctx):
     res = RTResult()
     this = exec_ctx.symbol_table.object.get('this')
@@ -2916,6 +2906,18 @@ def execute_list_isEmpty(pos_start, pos_end, exec_ctx):
         ))
 
     return res.success_return(Bool(len(this.elements) == 0))
+
+def execute_list_length(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, List):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a List',
+            exec_ctx
+        ))
+
+    return res.success_return(Int(len(this.elements)))
 
 def execute_list_remove(pos_start, pos_end, exec_ctx):
     res = RTResult()
@@ -3009,18 +3011,6 @@ def execute_tuple_get(pos_start, pos_end, exec_ctx):
     except IndexError:
         return res.success_return(Nil())
 
-def execute_tuple_length(pos_start, pos_end, exec_ctx):
-    res = RTResult()
-    this = exec_ctx.symbol_table.object.get('this')
-    if not isinstance(this, Tuple):
-        return res.failure(RTError(
-            pos_start, pos_end,
-            'first argument must be a Tuple',
-            exec_ctx
-        ))
-
-    return res.success_return(Int(len(this.elements)))
-
 def execute_tuple_isEmpty(pos_start, pos_end, exec_ctx):
     res = RTResult()
     this = exec_ctx.symbol_table.object.get('this')
@@ -3033,6 +3023,17 @@ def execute_tuple_isEmpty(pos_start, pos_end, exec_ctx):
 
     return res.success_return(Bool(len(this.elements) == 0))
 
+def execute_tuple_length(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, Tuple):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a Tuple',
+            exec_ctx
+        ))
+
+    return res.success_return(Int(len(this.elements)))
 
 def execute_function_new(pos_start, pos_end, exec_ctx):
     def execute(pos_start, pos_end, exec_ctx):
@@ -3041,6 +3042,18 @@ def execute_function_new(pos_start, pos_end, exec_ctx):
     result = BuiltInFunction('<anonymous>', execute, [])
 
     return RTResult().success_return(result)
+
+def execute_function_length(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+    this = exec_ctx.symbol_table.object.get('this')
+    if not isinstance(this, BaseFunction):
+        return res.failure(RTError(
+            pos_start, pos_end,
+            'first argument must be a Function',
+            exec_ctx
+        ))
+
+    return res.success_return(Int(len(this.arg_names)))
 
 
 def execute_system_print(pos_start, pos_end, exec_ctx):
@@ -3343,13 +3356,14 @@ string_toUpperCase = BuiltInFunction('toUpperCase', execute_string_toUpperCase, 
 
 
 list_new = BuiltInFunction('new', execute_list_new, [])
-list_length = BuiltInFunction('length', execute_list_length, ['this'])
 list_add = BuiltInFunction('add', execute_list_add, ['this', 'element'])
 list_clear = BuiltInFunction('clear', execute_list_clear, ['this'])
 list_get = BuiltInFunction('get', execute_list_get, ['this', 'index'])
 list_isEmpty = BuiltInFunction('isEmpty', execute_list_isEmpty, ['this'])
+list_length = BuiltInFunction('length', execute_list_length, ['this'])
 list_remove = BuiltInFunction('remove', execute_list_remove, ['this', 'index'])
 list_set = BuiltInFunction('set', execute_list_set, ['this', 'index', 'element'])
+# list_transform = BuiltInFunction('transform', execute_list_transform, ['this', 'fn'])
 
 tuple_new = BuiltInFunction('new', execute_tuple_new, [])
 tuple_get = BuiltInFunction('get', execute_tuple_get, ['this', 'element'])
@@ -3357,6 +3371,7 @@ tuple_length = BuiltInFunction('length', execute_tuple_length, ['this'])
 tuple_isEmpty = BuiltInFunction('isEmpty', execute_tuple_isEmpty, ['isEmpty'])
 
 function_new = BuiltInFunction('new', execute_function_new, [])
+function_length = BuiltInFunction('length', execute_function_length, ['this'])
 
 system_print = BuiltInFunction('print', execute_system_print, ['data'])
 system_write = BuiltInFunction('write', execute_system_write, ['data'])
@@ -3443,17 +3458,18 @@ list_object.set('new', list_new)
 list_object.set('add', list_add)
 list_object.set('clear', list_clear)
 list_object.set('get', list_get)
-list_object.set('length', list_length)
 list_object.set('isEmpty', list_isEmpty)
+list_object.set('length', list_length)
 list_object.set('remove', list_remove)
 list_object.set('set', list_set)
 
 tuple_object.set('new', tuple_new)
 tuple_object.set('get', tuple_get)
-tuple_object.set('length', tuple_length)
 tuple_object.set('isEmpty', tuple_isEmpty)
+tuple_object.set('length', tuple_length)
 
 function_object.set('new', function_new)
+function_object.set('length', function_length)
 
 system_object.set('print', system_print)
 system_object.set('write', system_write)
