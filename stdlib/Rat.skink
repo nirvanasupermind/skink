@@ -1,9 +1,8 @@
 //Skink standard library source code
 //Usage permitted under terms of MIT License
 
-//Represents pair of values.
-var Rat = {};
-Rat.hcf = func (x, y) {
+var Rat = Object.new();
+Rat.hcf = function (x, y) {
     if(y == 0) {
         return x;
     } else {
@@ -11,13 +10,19 @@ Rat.hcf = func (x, y) {
     }
 }
 
-Rat.new = func (n, d) {
+Rat.new = function (n, d) {
     var scale = Rat.hcf(n, d);
-    return ({"n": n/scale, "d": d/scale}).setPrototype(Rat);
+    
+    var result = Object.new();
+    result.setPrototype(Rat);
+    result.n = n / scale;
+    result.d = d / scale;
+
+    return result;
 }
 
-Rat.plus = func (this, that) {
-    if(Int.isPrototypeOf(that)) {
+Rat.plus = function (this, that) {
+    if(that is Int) {
         that = Rat.new(that, 1);
     }
 
@@ -26,13 +31,14 @@ Rat.plus = func (this, that) {
     var c = that.n;
     var d = that.d;
 
-    println(c);
-
     return Rat.new(a * d + b * c, b * d);
 }
 
-Rat.toString = func (this) {
-    return this.n.toString() + "/" + this.d.toString();
+Rat.uminus = function (this) {
+    System.print(this.n);
+    return Rat.new(-this.n, this.d);
 }
 
-export(Rat);
+Rat.toString = function(this) {
+    return (this.n).toString() + "/" + (this.d).toString();
+}

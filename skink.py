@@ -18,6 +18,9 @@ LETTERS_DIGITS = LETTERS + DIGITS
 BS = DIGITS + string.ascii_lowercase
 NEWLINES = '\n\r'
 DEFAULT_MAX_DEPTH = 500
+PACKAGES = {
+    'rat': './stdlib/Rat.skink'
+}
 
 I64_MIN_VALUE = -9223372036854775808
 I64_MAX_VALUE = 9223372036854775807
@@ -181,7 +184,8 @@ KEYWORDS = [
     'while',
     'function',
     'return',
-    'is'
+    'is',
+    'use'
 ]
 
 class Token:
@@ -703,6 +707,13 @@ class BracketNotationNode:
 class ReturnNode:
   def __init__(self, node_to_return, pos_start, pos_end):
     self.node_to_return = node_to_return
+
+    self.pos_start = pos_start
+    self.pos_end = pos_end
+
+class UseNode:
+  def __init__(self, path_node, pos_start, pos_end):
+    self.path_node = path_node
 
     self.pos_start = pos_start
     self.pos_end = pos_end
@@ -1332,7 +1343,17 @@ class Parser:
             if res.error: return res
 
             return res.success(ReturnNode(expr, pos_start, self.current_tok.pos_end.copy()))
-            
+        elif self.current_tok.matches(TT_KEYWORD, 'use'):
+            pos_start = self.current_tok.pos_start.copy()
+
+            res.register_advancement()
+            self.advance()
+
+            expr = res.register(self.expr())
+            if res.error: return res
+
+            return res.success(UseNode(expr, pos_start, self.current_tok.pos_end.copy()))
+
         if self.current_tok.matches(TT_KEYWORD, 'var'):
             var_declare_expr = res.register(self.var_assign_expr())
             if res.error: return res
@@ -1614,8 +1635,8 @@ class Object:
             return None, self.illegal_operation(other)
 
     def negated(self):
-        if self.get('neg') and isinstance(self.get('neg'), BaseFunction):
-            func = self.get('neg')
+        if self.get('uminus') and isinstance(self.get('uminus'), BaseFunction):
+            func = self.get('uminus')
             return self.overloaded_operation(self, func)
         else:
             return None, self.illegal_operation()
@@ -1750,7 +1771,7 @@ class Object:
     def __repr__(self):
         if self.get('toString') and isinstance(self.get('toString'), BaseFunction) and not (self.get('toString').uuid == object_object.get('toString').uuid):
             result = self.get('toString').execute([self], self.pos_start, self.pos_end)
-            return str(result.value)
+            return str(result.func_return_value)
 
         return f'{self.prototype.name}@{format(hash(self.uuid), "x")}'
 
@@ -2689,6 +2710,19 @@ class Interpreter:
         return res.success_return(expr).success(
             Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )    
+    
+    def visit_UseNode(self, node, context):
+        res = RTResult()
+        path = res.register(self.visit(node.path_node, context))
+        if res.error: return res
+
+        path = PACKAGES.get(str(path), str(path))
+        result, error = run(str(path))
+        if error: return res.failure(error)
+
+        return res.success(
+            Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
 #######################################
 # BUILT-IN FUNCTIONS

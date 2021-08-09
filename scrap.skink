@@ -1,54 +1,5 @@
-var Rat = Object.new();
-Rat.hcf = function (x, y) {
-    if(y == 0) {
-        return x;
-    } else {
-        return Rat.hcf(y, x % y);
-    }
-}
+use "rat";
+var x1 = Rat.new(4, 6);
+var x2 = Rat.new(1, 2);
 
-Rat.new = function (n, d) {
-    var scale = Rat.hcf(n, d);
-    
-    var result = Rat.new();
-    result.setPrototype(Rat);
-    result.n = n / scale;
-    result.d = d / scale;
-
-    return result;
-}
-
-Rat.plus = function (this, that) {
-    if(that is Int) {
-        that = Rat.new(that, 1);
-    }
-
-    var a = this.n;
-    var b = this.d;
-    var c = that.n;
-    var d = that.d;
-
-    return Rat.new(a * d + b * c, b * d);
-}
-
-Rat.toString = function(this) {
-    return (this.n).toString() + "/" + (this.d).toString();
-}
-
-var myRat = Rat.new(4, 6);
-System.print(myRat);
-// var Point = Object.new();
-// Point.new = function (x, y) {
-//     var result = Object.new();
-//     result.setPrototype(Point);
-//     result.x = x;
-//     result.y = y;
-//     return result;
-// }
-
-// Point.sum = function (this) {
-//     return this.x + this.y;
-// }
-
-// var myPoint = Point.new(1, 1);
-// System.print(myPoint.sum()); //=> 2
+System.print(-x1);
