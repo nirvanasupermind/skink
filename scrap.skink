@@ -1,4 +1,5 @@
-use "./stdlib/Complex.skink";
-var x = Complex.new(1.0, 1.0);
+use "complex";
+var x = Complex.new(-1.0, 0.0);
 var y = Complex.new(1.0, 1.0);
-System.print(x == y);
+var a = 2.0;
+System.print((function () { return x.a + "+" + x.b.toString() + "i"; })());

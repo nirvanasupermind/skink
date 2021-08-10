@@ -1,7 +1,10 @@
 //Skink standard library source code
 //Usage permitted under terms of MIT License
 
+//Represents a complex number.
 var Complex = Object.new();
+
+//Returns a Complex with the specified real and imaginary parts.
 Complex.new = function (a, b) {
     if(b is Nil) { 
         b = 0.0; 
@@ -15,6 +18,7 @@ Complex.new = function (a, b) {
     return result;
 }
 
+//Returns the Complex whose value is (this + other).
 Complex.plus = function (this, other) {
     if(other is Float) {
         other = Complex.new(other);
@@ -23,10 +27,7 @@ Complex.plus = function (this, other) {
     return Complex.new(this.a + other.a, this.b + other.b);
 }
 
-Complex.uminus = function (this) {
-    return Complex.new(-this.a, -this.b);
-}
-
+//Returns the Complex whose value is (this - other).
 Complex.minus = function (this, other) {
     if(other is Float) {
         other = Complex.new(other);
@@ -35,14 +36,53 @@ Complex.minus = function (this, other) {
     return this + (-other);
 }
 
+//Returns the Complex whose value is (this * other).
 Complex.mul = function (this, other) {
     if(other is Float) {
         other = Complex.new(other);
     }
 
-    return Complex.new(this.a * other.a - this.b * other.b, this.a * other.b + this.b * other.a)
+    var a = this.a;
+    var b = this.b;
+    var c = other.a;
+    var d = other.b;
+
+    return Complex.new(a * c - b * d, a * d + b * c);
 }
 
+//Returns the Complex whose value is (this / other).
+Complex.div = function (this, other) {
+    if(other is Float) {
+        other = Complex.new(other);
+    }
+
+    var a = this.a;
+    var b = this.b;
+    var c = other.a;
+    var d = other.b;
+
+    return Complex.new((a * c + b * d)/(c * c + d * d), (b * c - a * d)/(c * c + d * d));
+}
+
+//Returns the Complex whose value is the square root of this.
+Complex.sqrt = function (this) {
+    var t1 = Math.pow(this.a * this.a + this.b * this.b, 0.25);
+    var t2 = 0.5 * Math.atan2(this.b, this.a);
+    
+    return Complex.new(t1 * Math.cos(t2), t1 * Math.sin(t2));
+}
+
+//Returns this.
+Complex.uplus = function (this) {
+    return this;
+}
+
+//Returns the Complex whose value is (-this).
+Complex.uminus = function (this) {
+    return Complex.new(-this.a, -this.b);
+}
+
+//Returns whether this is equal to other.
 Complex.eq = function (this, other) {
     if(!(other is Complex)) { 
         return false;
@@ -50,6 +90,25 @@ Complex.eq = function (this, other) {
         return this.a == other.a && this.b == other.b;
     }
 }
+
+//Returns whether this is not equal to other.
+Complex.ne = function (this, other) {
+    return !(this == other);
+}
+
+//Returns a string representation of this Complex.
 Complex.toString = function(this) {
-    return "("+this.a.toString()+", "+this.b.toString()+")";
+    if(this.a == 0) {
+        return this.b.toString() + "i";
+    } else {
+        if(this.b == 0) {
+            return this.a.toString();
+        } else {
+            if(this.b < 0) {
+                return this.a + "-" +(-this.b).toString() + "i";
+            } else {
+                return this.a + "+" + this.b.toString() + "i";
+            }
+        }
+    }
 }
