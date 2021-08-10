@@ -1,5 +1,4 @@
-use "rat";
-var x1 = Rat.new(4, 6);
-var x2 = Rat.new(1, 2);
-
-System.print(-x1);
+use "./stdlib/Complex.skink";
+var x = Complex.new(1.0, 1.0);
+var y = Complex.new(1.0, 1.0);
+System.print(x == y);

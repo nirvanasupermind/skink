@@ -1,0 +1,55 @@
+//Skink standard library source code
+//Usage permitted under terms of MIT License
+
+var Complex = Object.new();
+Complex.new = function (a, b) {
+    if(b is Nil) { 
+        b = 0.0; 
+    }
+
+    var result = Object.new();
+    result.setPrototype(Complex);
+    result.a = a;
+    result.b = b;
+
+    return result;
+}
+
+Complex.plus = function (this, other) {
+    if(other is Float) {
+        other = Complex.new(other);
+    }
+
+    return Complex.new(this.a + other.a, this.b + other.b);
+}
+
+Complex.uminus = function (this) {
+    return Complex.new(-this.a, -this.b);
+}
+
+Complex.minus = function (this, other) {
+    if(other is Float) {
+        other = Complex.new(other);
+    }
+
+    return this + (-other);
+}
+
+Complex.mul = function (this, other) {
+    if(other is Float) {
+        other = Complex.new(other);
+    }
+
+    return Complex.new(this.a * other.a - this.b * other.b, this.a * other.b + this.b * other.a)
+}
+
+Complex.eq = function (this, other) {
+    if(!(other is Complex)) { 
+        return false;
+    } else {
+        return this.a == other.a && this.b == other.b;
+    }
+}
+Complex.toString = function(this) {
+    return "("+this.a.toString()+", "+this.b.toString()+")";
+}

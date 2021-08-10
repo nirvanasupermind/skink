@@ -8,6 +8,7 @@ import numpy as np
 import uuid
 import string
 import sys
+import os
 
 #######################################
 # CONSTANTS
@@ -19,7 +20,7 @@ BS = DIGITS + string.ascii_lowercase
 NEWLINES = '\n\r'
 DEFAULT_MAX_DEPTH = 500
 PACKAGES = {
-    'rat': './stdlib/Rat.skink'
+    'complex': './stdlib/Complex.skink'
 }
 
 I64_MIN_VALUE = -9223372036854775808
@@ -31,6 +32,8 @@ FLOAT_MAX_VALUE = sys.float_info.max
 #######################################
 # UTILITY FUNCTIONS
 #######################################
+# add this if there is stack overflow
+sys.tracebacklimit = 0
 
 def to_skink_number(n):
     if isinstance(n, np.int64): return Int(n)
@@ -798,9 +801,9 @@ class Parser:
         if tok.type in (TT_PLUS, TT_MINUS, TT_NOT, TT_BITNOT):
             res.register_advancement()
             self.advance()
-            factor = res.register(self.factor())
+            call = res.register(self.call())
             if res.error: return res
-            return res.success(UnaryOpNode(tok, factor))
+            return res.success(UnaryOpNode(tok, call))
         
         elif tok.matches(TT_KEYWORD, 'nil'):
             res.register_advancement()
@@ -1593,10 +1596,11 @@ class Object:
             self.values.append(value)
             
     def overloaded_operation(self, other, func):
+        # print(self, other, func.arg_names)
         result = func.execute(
             [self, other], other.pos_start, other.pos_end
         )
-        
+    
         return result.func_return_value, result.error
 
     def added_to(self, other):
@@ -1637,7 +1641,12 @@ class Object:
     def negated(self):
         if self.get('uminus') and isinstance(self.get('uminus'), BaseFunction):
             func = self.get('uminus')
-            return self.overloaded_operation(self, func)
+            # print([self])
+            result = func.execute(
+                [self], self.pos_start, self.pos_end
+            )
+    
+            return result.func_return_value, result.error
         else:
             return None, self.illegal_operation()
 
@@ -1774,7 +1783,6 @@ class Object:
             return str(result.func_return_value)
 
         return f'{self.prototype.name}@{format(hash(self.uuid), "x")}'
-
 
 class Nil(Object):
     def __init__(self):
@@ -2716,7 +2724,12 @@ class Interpreter:
         path = res.register(self.visit(node.path_node, context))
         if res.error: return res
 
-        path = PACKAGES.get(str(path), str(path))
+        path = str(path)
+        if path in list(PACKAGES.keys()): 
+            path = PACKAGES[path]
+        else:
+            path = os.path.join(os.getcwd(), path)
+
         result, error = run(str(path))
         if error: return res.failure(error)
 
