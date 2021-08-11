@@ -64,7 +64,7 @@ Complex.div = function (this, other) {
     return Complex.new((a * c + b * d)/(c * c + d * d), (b * c - a * d)/(c * c + d * d));
 }
 
-//Returns the Complex whose value is the square root of this.
+//Returns the square root.
 Complex.sqrt = function (this) {
     var t1 = Math.pow(this.a * this.a + this.b * this.b, 0.25);
     var t2 = 0.5 * Math.atan2(this.b, this.a);
@@ -98,17 +98,5 @@ Complex.ne = function (this, other) {
 
 //Returns a string representation of this Complex.
 Complex.toString = function(this) {
-    if(this.a == 0) {
-        return this.b.toString() + "i";
-    } else {
-        if(this.b == 0) {
-            return this.a.toString();
-        } else {
-            if(this.b < 0) {
-                return this.a + "-" +(-this.b).toString() + "i";
-            } else {
-                return this.a + "+" + this.b.toString() + "i";
-            }
-        }
-    }
+    return "(" + this.a.toString() + ", "+this.b.toString()+")";
 }

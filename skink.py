@@ -1799,12 +1799,18 @@ class Object:
             self.context
         )
 
-    def __repr__(self):
+    def as_string(self):
+        if type(self) != Object:
+            return str(self), None
+
         if self.get('toString') and isinstance(self.get('toString'), BaseFunction) and self.get('toString') != object_object.get('toString') and not (self.get('toString').uuid == object_object.get('toString').uuid):
             result = self.get('toString').execute([self], self.pos_start, self.pos_end)
-            return str(result.func_return_value)
+            return result.func_return_value, result.error
 
-        return f'{self.prototype.name}@{format(hash(self.uuid), "x")}'
+        return f'{self.prototype.name}@{format(hash(self.uuid), "x")}', None
+
+    def __repr__(self):
+        return str(self.as_string()[0])
 
 class Nil(Object):
     def __init__(self):
@@ -1976,7 +1982,6 @@ class Float(Object):
             else:
                 return Float(result).set_context(self.context), None
         else:
-            # print('illegal!')
             return None, Object.illegal_operation(self, other)
 
     def subbed_by(self, other): 
@@ -2126,7 +2131,6 @@ class String(Object):
     def added_to(self, other):
         if isinstance(other, String):
             result = self.value + other.value
-            print(result)
             return String(result).set_context(self.context), None
         else:
             return None, Object.illegal_operation(self, other)
@@ -2190,7 +2194,6 @@ class BaseFunction(Object):
         return new_context
     
     def normalize_args(self, pos_start, pos_end, arg_names, args):
-        # print(self.name, args)
         while len(args) < len(arg_names):
             args.append(Nil().set_pos(pos_start, pos_end))
 
@@ -2201,8 +2204,9 @@ class BaseFunction(Object):
             arg_name = arg_names[i]
             arg_value = args[i]
             arg_value.set_context(exec_ctx)
+            print(type(arg_value), arg_value.value if hasattr(arg_value, 'value') else None, exec_ctx.symbol_table.object.keys)
             exec_ctx.symbol_table.object.set(arg_name, arg_value)
-    
+            
     def normalize_and_populate_args(self, pos_start, pos_end, arg_names, args, exec_ctx):
         args = self.normalize_args(pos_start, pos_end, arg_names, args)
         self.populate_args(arg_names, args, exec_ctx)
@@ -2220,7 +2224,6 @@ class Function(BaseFunction):
     def execute(self, args, pos_start, pos_end):
         res = RTResult()
         interpreter = Interpreter()
-        # print(self.context.display_name)
         new_context = self.generate_new_context()
 
         self.normalize_and_populate_args(
@@ -2483,6 +2486,7 @@ class Interpreter:
                 
                 value = right
 
+                # print(old_value, (old_value.context.symbol_table.object.keys, old_value.context.symbol_table.object.values))
                 old_value.context.symbol_table.object.set(var_name, value)
                 return res.success(value)
             elif isinstance(node.left_node, DotNotationNode):
@@ -2570,7 +2574,6 @@ class Interpreter:
             if res.error: return res
             return res.success(result)
 
-        # print(left, right, node.op_tok, error)
         if error: 
             return res.failure(error)
         
@@ -2707,17 +2710,22 @@ class Interpreter:
 
         value_to_call = res.register(self.visit(node.node_to_call, context))
         if res.error: return res
+
         value_to_call = value_to_call.set_pos(node.pos_start, node.pos_end)
 
         if isinstance(value_to_call, BaseFunction) and value_to_call.arg_names and value_to_call.arg_names[0] == 'this' and isinstance(node.node_to_call, (DotNotationNode, BracketNotationNode)):
             obj = res.register(self.visit(node.node_to_call.obj_node, context))
             if res.error: return res
             args.append(obj)
+            # print('ok!')
 
         for arg_node in node.arg_nodes:
-            args.append(res.register(self.visit(arg_node, context)))
+            arg = res.register(self.visit(arg_node, context))
             if res.error: return res
+            arg.set_context(context)
+            args.append(arg)
 
+            # i += 1
 
         return_value = res.register(value_to_call.execute(args, node.pos_start, node.pos_end))
         if res.error: return res
@@ -2778,8 +2786,9 @@ class Interpreter:
             path = os.path.join(os.getcwd(), path)
 
         result, error = run(str(path))
-        if error: return res.failure(error)
-
+        if error:
+            return res.failure(error)
+        
         return res.success(
             Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )
@@ -2792,7 +2801,6 @@ def execute_object_new(pos_start, pos_end, exec_ctx):
 
 def execute_object_getPrototype(pos_start, pos_end, exec_ctx):
     this = exec_ctx.symbol_table.object.get('this')
-    # print('getPrototype')
 
     return RTResult().success_return(this.prototype)
 
@@ -2805,12 +2813,20 @@ def execute_object_setPrototype(pos_start, pos_end, exec_ctx):
     return RTResult().success_return(this)
 
 def execute_object_toString(pos_start, pos_end, exec_ctx):
+    res = RTResult()
+
     this = exec_ctx.symbol_table.object.get('this')
-    return RTResult().success_return(String(str(this)))
+    result, error = this.as_string()
+    if error: return res.failure(error)
+    return RTResult().success_return(String(str(result)))
 
 def execute_object_hashCode(pos_start, pos_end, exec_ctx):
+    res = RTResult()
     this = exec_ctx.symbol_table.object.get('this')
-    return RTResult().register(system_identityHashCode.execute([this], pos_start, pos_end))
+    result = res.register(system_identityHashCode.set_context(exec_ctx).execute([this], pos_start, pos_end))
+    if res.error: return res
+
+    return res.success(result)
 
 def execute_object_getKeys(pos_start, pos_end, exec_ctx):
     this = exec_ctx.symbol_table.object.get('this')
@@ -3193,8 +3209,6 @@ def execute_list_remove(pos_start, pos_end, exec_ctx):
     return res.success(result)
 
 def execute_list_set(pos_start, pos_end, exec_ctx):
-    # print('HELLO?')
-
     res = RTResult()
     this = exec_ctx.symbol_table.object.get('this')
     index = exec_ctx.symbol_table.object.get('index')
@@ -3221,8 +3235,6 @@ def execute_list_set(pos_start, pos_end, exec_ctx):
         for i in range((index.value + 1) - (len(this.elements))):
             this.elements.append(Nil())
         
-        # print(f'*** {len(this.elements)}')
-        # print(index.value)
         this.elements[index.value] = element
     
     return res.success(element)
@@ -3303,7 +3315,12 @@ def execute_system_identityHashCode(pos_start, pos_end, exec_ctx):
     return RTResult().success_return(Int(hash(o.uuid)))
 
 def execute_system_print(pos_start, pos_end, exec_ctx):
-    print(str(exec_ctx.symbol_table.object.get('data')))
+    res = RTResult()
+    data = exec_ctx.symbol_table.object.get('data')
+    result, error = data.as_string()
+    if error: return res.failure(error)
+
+    print(str(result))
     return RTResult().success_return(Nil())
 
 def execute_system_prompt(pos_start, pos_end, exec_ctx):
@@ -3311,9 +3328,12 @@ def execute_system_prompt(pos_start, pos_end, exec_ctx):
     return RTResult().success_return(String(result))
 
 def execute_system_write(pos_start, pos_end, exec_ctx):
-    print(str(exec_ctx.symbol_table.object.get('data')), end='')
-    return RTResult().success_return(Nil())
+    res = RTResult()
+    data = exec_ctx.symbol_table.object.get('data')
+    result, error = data.as_string()
+    if error: return res.failure(error)
 
+    print(str(result), end='')
 
 def execute_math_sin(pos_start, pos_end, exec_ctx):
     res = RTResult()

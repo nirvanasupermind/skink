@@ -1,5 +1,3 @@
 use "complex";
-var x = Complex.new(-1.0, 0.0);
-var y = Complex.new(1.0, 1.0);
-var a = 2.0;
-System.print((function () { return x.a + "+" + x.b.toString() + "i"; })());
+var y = Complex.new(1.0, -1.0);
+System.print(y + 0.0);
