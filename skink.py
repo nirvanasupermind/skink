@@ -2204,7 +2204,7 @@ class BaseFunction(Object):
             arg_name = arg_names[i]
             arg_value = args[i]
             arg_value.set_context(exec_ctx)
-            print(type(arg_value), arg_value.value if hasattr(arg_value, 'value') else None, exec_ctx.symbol_table.object.keys)
+            # print(type(arg_value), arg_value.value if hasattr(arg_value, 'value') else None, exec_ctx.symbol_table.object.keys)
             exec_ctx.symbol_table.object.set(arg_name, arg_value)
             
     def normalize_and_populate_args(self, pos_start, pos_end, arg_names, args, exec_ctx):
@@ -2393,6 +2393,7 @@ class Interpreter:
         for i in range(0, len(node.element_nodes)):
             line = res.register(self.visit(node.element_nodes[i], context))
             if res.error: return res
+            # if res.func_return_value: return res
 
             lines.append(line)
         
@@ -2517,6 +2518,7 @@ class Interpreter:
                 ))
         elif node.op_tok.type == TT_EE:
             result, error = left.get_comparison_eq(right)
+            # print({'left': left, 'right': right, 'result': result})
         elif node.op_tok.type == TT_NE:
             result, error = left.get_comparison_ne(right)
         elif node.op_tok.type == TT_LT:
@@ -2598,8 +2600,7 @@ class Interpreter:
         
         if error: return res.failure(error)
         return res.success(number.set_pos(node.pos_start, node.pos_end))
-
-
+        
     def visit_IfNode(self, node, context): 
         new_context = Context('if statement', context, node.pos_start)
         new_context.symbol_table = SymbolTable(Object(new_context.parent.symbol_table.object))
@@ -2770,6 +2771,7 @@ class Interpreter:
         expr = res.register(self.visit(node.node_to_return, context))
         if res.error: return res
 
+        # func_return_value, value, error
         return res.success_return(expr).success(
             Nil().set_context(context).set_pos(node.pos_start, node.pos_end)
         )    
@@ -3764,15 +3766,29 @@ math_object.set('min', math_min)
 math_object.set('max', math_max)
 
 def runstring(text, fn='<anonymous>'):
+    # lexer: (5 + 5) * 5 => [INT:5, PLUS, INT:5, MUL, INT:5]
+    # parser: [INT:5, PLUS, INT:5, MUL, INT:5] => ((INT:5, PLUS, INT:5), MUL, INT:5)
+    # interpreter: ((INT:5, PLUS, INT:5), MUL, INT:5) =>
+    # I found binary operation node!
+    # I found another binary operation node!
+    # I found int node!
+    # I found another int node!
+
     # Generate tokens
     lexer = Lexer(fn, text)
     tokens, error = lexer.make_tokens()
     if error: return None, error
 
+    # print(f'lexer: {tokens}')
+    # print('***************')
+
     # Generate AST
     parser = Parser(tokens)
     ast = parser.parse()
     if ast.error: return None, ast.error
+
+    # print(f'parser: {ast.node.__dict__}')
+    # print('***************')
 
     # Run program
     interpreter = Interpreter()

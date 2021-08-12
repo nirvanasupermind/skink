@@ -6,9 +6,9 @@ var Complex = Object.new();
 
 //Returns a Complex with the specified real and imaginary parts.
 Complex.new = function (a, b) {
-    if(b is Nil) { 
-        b = 0.0; 
-    }
+    // if(b is Nil) { 
+    //     b = 0.0; 
+    // }
 
     var result = Object.new();
     result.setPrototype(Complex);
@@ -20,8 +20,9 @@ Complex.new = function (a, b) {
 
 //Returns the Complex whose value is (this + other).
 Complex.plus = function (this, other) {
+    System.print("we're inside plus!")
     if(other is Float) {
-        other = Complex.new(other);
+        other = Complex.new(other, 0.0);
     }
 
     return Complex.new(this.a + other.a, this.b + other.b);

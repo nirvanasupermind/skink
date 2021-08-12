@@ -1,3 +1,20 @@
-use "complex";
-var y = Complex.new(1.0, -1.0);
-System.print(y + 0.0);
+// function f(x) {
+//     if(x == 5) { return "Hello!"; }
+//     return "Bye!";
+// }
+// System.print("interpreter: " + f(5).toString()); //Hello!
+
+// use "complex";
+// var y = Complex.new(0.0, 2.0); //2i
+// System.print(y + 1.0); //1.0 + 0.0i
+
+(function () {
+    if(2 == 2) {
+        System.print("2 == 2");
+        return 50;
+        
+        if(2 != 3) {
+            System.print("2 != 3");
+        }
+    }
+})();
