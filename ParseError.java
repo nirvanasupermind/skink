@@ -9,6 +9,6 @@ public class ParseError {
     }
 
     public String toString() {
-        return "(pos="+String.valueOf(pos)+")";
+        return String.format("ParseError(pos=%s)", this.pos);
     }
 }

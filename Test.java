@@ -2,7 +2,7 @@ import java.lang.*;
 import skink.Parser;
 public class Test {  
     public static void main(String[] args) {
-        
-        System.out.println("hello");
+        String text = " ";
+        System.out.println(new Parser(text).parse());
     }
 }
