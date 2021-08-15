@@ -3,10 +3,11 @@ class TokenType:
     FLOAT = 'FLOAT'
     PLUS = 'PLUS'
     MINUS = 'MINUS'
-    MULTIPLY = 'MULTIPLY'
-    DIVIDE = 'DIVIDE'
+    MUL = 'MUL'
+    DIV = 'DIV'
     LPAREN = 'LPAREN'
     RPAREN = 'RPAREN'
+    EOF = 'EOF'
 
 class Token:
     def __init__(self, type, value=None):

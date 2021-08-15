@@ -31,10 +31,10 @@ class Lexer:
                 tokens.append(Token(TokenType.MINUS))
                 self.advance()
             elif self.current_char == '*':
-                tokens.append(Token(TokenType.MULTIPLY))
+                tokens.append(Token(TokenType.MUL))
                 self.advance()
             elif self.current_char == '/':
-                tokens.append(Token(TokenType.DIVIDE))
+                tokens.append(Token(TokenType.DIV))
                 self.advance()
             elif self.current_char == '(':
                 tokens.append(Token(TokenType.LPAREN))
@@ -69,10 +69,7 @@ class Lexer:
             number_str += '0'
         
         if decimal_point_count == 0:
-            return Token(TokenType.INT, int(number_str))
+            return Token(TokenType.INT, number_str)
         else:
-            return Token(TokenType.FLOAT, float(number_str))
-    
-
-
+            return Token(TokenType.FLOAT, number_str)
 

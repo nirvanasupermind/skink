@@ -1,4 +1,6 @@
 from lexer import Lexer
+from parser_ import Parser
+from interpreter import Interpreter
 
 def run_shell():
     while True:
@@ -7,6 +9,11 @@ def run_shell():
 
         lexer = Lexer(text)
         tokens = lexer.generate_tokens()
-        print(tokens)
+
+        parser = Parser(tokens)
+        tree = parser.parse()
+
+        interpreter = Interpreter()
+        print(interpreter.eval(tree))
     
 run_shell()
