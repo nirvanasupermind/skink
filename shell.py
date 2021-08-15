@@ -14,6 +14,6 @@ def run_shell():
         tree = parser.parse()
 
         interpreter = Interpreter()
-        print(interpreter.eval(tree))
+        print(interpreter.eval(tree, Interpreter.global_scope))
     
 run_shell()

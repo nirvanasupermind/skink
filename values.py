@@ -12,7 +12,13 @@ class Object:
         self.name = name
         self.prototype = prototype
         self.uuid = uuid.uuid4()
+
+        self.set_pos()
     
+    def set_pos(self, pos=None):
+        self.pos = pos
+        return self
+
     def set(self, key, value):
         if key in self.keys:
             self.values[self.keys.index(key)] = value
@@ -48,7 +54,7 @@ class Object:
         self.illegal_operation()
 
     def illegal_operation(self):
-        raise Error('illegal operation')
+        raise Error('illegal operation', self.pos)
 
 class Int(Object):
     def __init__(self, value):
@@ -58,21 +64,21 @@ class Int(Object):
     def __add__(self, other):
         if isinstance(other, (Int, Float)):
             result = self.value + other.value
-            return to_int_or_float(result)
+            return to_int_or_float(result).set_pos(self.pos)
         else:
             self.illegal_operation()
 
     def __sub__(self, other):
         if isinstance(other, (Int, Float)):
             result = self.value - other.value
-            return to_int_or_float(result)
+            return to_int_or_float(result).set_pos(self.pos)
         else:
             self.illegal_operation()
 
     def __mul__(self, other):
         if isinstance(other, (Int, Float)):
             result = self.value * other.value
-            return to_int_or_float(result)
+            return to_int_or_float(result).set_pos(self.pos)
         else:
             self.illegal_operation()
 
@@ -83,7 +89,7 @@ class Int(Object):
             else:
                 result = self.value / other.value
 
-            return to_int_or_float(result)
+            return to_int_or_float(result).set_pos(self.pos)
         else:
             self.illegal_operation()
 
