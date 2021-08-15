@@ -63,6 +63,7 @@ class Lexer:
         
         if number_str.startswith('.'):
             number_str = '0' + number_str
+            decimal_point_count += 1
         
         if number_str.endswith('.'):
             number_str += '0'
