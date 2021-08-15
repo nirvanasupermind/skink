@@ -1,4 +1,5 @@
 from tokens import TokenType, Token
+from errors import Error
 
 WHITESPACE = ' \n\t'
 DIGITS = '0123456789'
@@ -42,7 +43,7 @@ class Lexer:
                 tokens.append(Token(TokenType.RPAREN))
                 self.advance()
             else:
-                raise Exception(f'Illegal character "{self.current_char}"')
+                raise Error(f'illegal character "{self.current_char}"')
         
         return tokens
 
