@@ -18,6 +18,10 @@ class Interpreter:
             return self.eval_mul(exp)
         elif exp[0] == 'div':
             return self.eval_div(exp)
+        elif exp[0] == 'uplus':
+            return self.eval_uplus(exp)
+        elif exp[0] == 'uminus':
+            return self.eval_uminus(exp)
         else:
             raise Exception('Unimplemented')
 
@@ -53,3 +57,11 @@ class Interpreter:
         right = self.eval(exp[2])
         
         return left / right
+
+    def eval_uplus(self, exp):
+        left = self.eval(exp[1])        
+        return +left
+
+    def eval_uminus(self, exp):
+        left = self.eval(exp[1])        
+        return -left

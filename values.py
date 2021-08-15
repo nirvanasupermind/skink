@@ -41,6 +41,12 @@ class Object:
     def __truediv__(self, other):
         self.illegal_operation()
 
+    def __pos__(self):
+        self.illegal_operation()
+
+    def __neg__(self):
+        self.illegal_operation()
+
     def illegal_operation(self):
         raise Error('illegal operation')
 
@@ -81,6 +87,12 @@ class Int(Object):
         else:
             self.illegal_operation()
 
+    def __pos__(self):
+        return Int(self.value)
+
+    def __neg__(self):
+        return Int(-self.value)
+
     def __repr__(self):
         return str(self.value)
 
@@ -120,6 +132,12 @@ class Float(Object):
             return to_int_or_float(result)
         else:
             self.illegal_operation()
+
+    def __pos__(self):
+        return Float(self.value)
+
+    def __neg__(self):
+        return Float(-self.value)
 
     def __repr__(self):
         return str(self.value)
