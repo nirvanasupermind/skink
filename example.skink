@@ -1,0 +1,15 @@
+var Vector = Object.clone();
+Vector.set = (x, y, z) => {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+}
+
+Vector.magnitude = () => {
+    return sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+}
+
+var vec = Vector.clone();
+vec.set(1, 1, 1);
+
+println(vec.magnitude());
