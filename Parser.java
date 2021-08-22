@@ -14,6 +14,13 @@ public class Parser {
 
     public void advance() {
         this.index++;
+    }
+
+    public Token getCurrentToken() {
         return this.tokens.get(this.index);
+    }
+
+    public boolean isAtEnd() {
+        return this.index >= this.tokens.size();
     }
 }

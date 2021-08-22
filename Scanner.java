@@ -19,12 +19,11 @@ public class Scanner {
     }
     
     public char getCurrentChar() {
-        // System.out.println(this.pos);
         return this.source.charAt(this.pos);
     }
 
     public boolean isAtEnd() {
-        return this.pos >= source.length();
+        return this.pos >= this.source.length();
     }
 
     public ArrayList<Token> scanTokens() {
