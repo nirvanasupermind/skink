@@ -7,7 +7,7 @@ public enum TokenType {
     FLOAT, 
     PLUS, 
     MINUS, 
-    MUL, 
+    MUL,
     DIV, 
     MOD,
     LPAREN,
