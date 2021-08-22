@@ -15,7 +15,14 @@ class BasicLexer(Lexer):
             t.type = 'INT'
         
         return t
-        
+
+    # Newline token(used only for showing
+    # errors in new line)
+    @_(r'[\n\r;]+')
+    def newline(self, t):
+        self.lineno = t.value.count('\n')
+        return t
+  
     # tokens = { NAME, INT, FLOAT, STRING }
     # ignore = '\t '
     # literals = { '=', '+', '-', '/', 
