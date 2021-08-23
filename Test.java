@@ -1,17 +1,10 @@
 import java.lang.*;
-import java.util.ArrayList;
-import skink.Skink;
-import skink.Token;
+import skink.Lexer;
 
 public class Test {
-    public static void main(String[] args) {
-        String source = "(1 + 2) * 3";
-        
-        ArrayList<Token> tokens = Skink.runString(source);
-        for(var i = 0; i < tokens.size(); i++) {
-            System.out.print(tokens.get(i).type);
-            System.out.print(":");
-            System.out.println(tokens.get(i).value);
-        }
+    public static void main(String[] args) { 
+        String source = "echo \"Hello World\"\necho \"H\"";
+
+        System.out.println(Lexer.lex(source));
     }
 }
