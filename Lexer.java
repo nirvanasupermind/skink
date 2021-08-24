@@ -56,5 +56,10 @@ public class Lexer {
     public void launchRegEx() {
         regEx.put(TokenType.PLUS, "(\\+{1}).*");
         regEx.put(TokenType.MINUS, "(\\-{1}).*");
+		regEx.put(TokenType.MULTIPLY, "(\\*{1}).*");
+		regEx.put(TokenType.DIVIDE, "(\\/{1}).*");
+		regEx.put(TokenType.MOD, "(%{1}).*");
+		regEx.put(TokenType.OPEN_BRACE, "(\\().*");
+		regEx.put(TokenType.CLOSE_BRACE, "(\\)).*");
     }
 }

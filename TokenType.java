@@ -7,9 +7,10 @@ public enum TokenType {
     // FLOAT,
     PLUS,
     MINUS,
-    // MULTIPLY,
-    // DIVIDE,
-    // OPEN_BRACE,
-    // CLOSE_BRACE,
+    MULTIPLY,
+    DIVIDE,
+    MOD,
+    OPEN_BRACE,
+    CLOSE_BRACE
     // EOF
 }
