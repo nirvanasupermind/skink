@@ -2,44 +2,59 @@ package skink;
 
 import java.lang.*;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Lexer {
-    public static ArrayList<String> lex(String source) {
-        ArrayList<String> tokens = new ArrayList<String>();
-        String tok = "";
-        String string = "";
-        int isInString = 0;
+    public HashMap<TokenType, String> regEx;
+    public ArrayList<Token> tokens;
 
-        for(var i = 0; i < source.length(); i++) {
-            char character = source.charAt(i);
-            tok += character;
+    public Lexer() {
+        this.regEx = new HashMap<TokenType, String>();
+        this.launchRegEx();
+        this.tokens = new ArrayList<Token>();
+    }
 
-            if(tok.equals(" ")) {
-                if(isInString == 0) {
-                    tok = "";
-                } else {
-                    tok = " ";
-                }
-            } else if(tok.equals("\n")) {
-                tok = "";
-            } else if(tok.equals("echo")) {
-                tokens.add("ECHO");
-                tok = "";
-            } else if(tok.equals("\"")) {
-                if(isInString == 0) {
-                    isInString = 1;
-                } else if(isInString == 1) {
-                    tokens.add("STRING:"+string.substring(1));
-                    string = "";
-                    isInString = 0;
-                    tok = "";
-                }
-            } else if(isInString == 1) {
-                string += tok;
-                tok = "";
-            }
-        }
+    public void tokenize(String source)  {
+		int position = 0;
+		Token token = null;
+		do {
+			token = separateToken(source, position);
+			if (token != null) {
+				position = token.endIndex;
+				this.tokens.add(token);
+			}
 
-        return tokens;
+		} while (token != null && position != source.length());
+        if (position != source.length()) {
+			throw new LexerException(position);
+		}
+	}
+
+    public Token separateToken(String source, int fromIndex) {
+		if (fromIndex < 0 || fromIndex >= source.length()) {
+            throw new LexerException(fromIndex);
+		}
+
+		for (TokenType tokenType : TokenType.values()) {
+			Pattern p = Pattern.compile(".{" + fromIndex + "}" + regEx.get(tokenType),
+					Pattern.DOTALL);
+			Matcher m = p.matcher(source);
+			if (m.matches()) {
+				String lexema = m.group(1);
+				return new Token(
+                    tokenType, lexema, 
+                    fromIndex, fromIndex + lexema.length()
+                );
+			}
+		}
+
+		return null;
+	}
+
+    public void launchRegEx() {
+        regEx.put(TokenType.PLUS, "(\\+{1}).*");
+        regEx.put(TokenType.MINUS, "(\\-{1}).*");
     }
 }
