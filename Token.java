@@ -1,22 +1,16 @@
 package skink;
 
-import java.lang.*;
-
 public class Token {
-    TokenType tokenType;
-    String tokenString;
-    int startIndex;
-    int endIndex;
+    public TokenType type;
+    public String value;
+    public int index;
 
-    public Token(TokenType tokenType, String tokenString, int startIndex, int endIndex) {
-        this.tokenType = tokenType;
-        this.tokenString = tokenString;
-        this.startIndex = startIndex;
-        this.endIndex = endIndex;
-	  }
+    public Token(TokenType type, String value, int index) {
+        this.type = type;
+        this.value = value;
+    }
 
-    //for debugging
     public String toString() {
-      return String.format("(%s, %s)", this.tokenType, this.tokenString);
+        return this.type.toString();
     }
 }

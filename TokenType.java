@@ -1,16 +1,13 @@
 package skink;
 
-import java.lang.*;
-
 public enum TokenType {
-    // INT,
-    // FLOAT,
+    NUMBER,
     PLUS,
     MINUS,
     MULTIPLY,
     DIVIDE,
-    MOD,
-    OPEN_BRACE,
-    CLOSE_BRACE
-    // EOF
+    LPAREN,
+    RPAREN,
+    POWER,
+    EOF
 }

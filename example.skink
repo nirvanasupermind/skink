@@ -1,15 +1,38 @@
-var Vector = Object.clone();
-Vector.set = (x, y, z) -> {
-    this.x = x;
-    this.y = y;
-    this.z = z;
+class Vector {
+    var constructor = (x, y, z) -> {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+    
+    var magnitude = () -> {
+        return 2;
+    }
 }
 
-Vector.magnitude = () -> {
-    return sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
-}
+println(new Vector(0, 0, 0));
 
-var vec = Vector.clone();
-vec.set(1, 1, 1);
+// var Vector = {
+//     "magnitude": fn() {
+//         return sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+//     }
+// };
 
-println(vec.magnitude());
+// var vec = {"proto": Vector, "x": 1, "y": 1, "z": 1};
+// echo vec["magnitude"](); //vec.magnitude()
+
+// ////////////////////////////////////////
+// var Vector = Object.clone();
+// Vector.set = (x, y, z) -> {
+//     this.x = x;
+//     this.y = y;
+//     this.z = z;
+// }
+
+// Vector.magnitude = () -> {
+//     return sqrt(this.x * this.y * this.y + this.z * this.z);
+// }
+
+// var vec = Vector.clone();
+// vec.set(1, 1, 1);
+// println(vec.magnitude());
