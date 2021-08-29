@@ -1,38 +1,14 @@
-class Vector {
-    var constructor = (x, y, z) -> {
+class Point {
+    fn constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.z = z;
     }
-    
-    var magnitude = () -> {
-        return 2;
+
+    fn magnitude() {
+        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
     }
 }
 
-println(new Vector(0, 0, 0));
-
-// var Vector = {
-//     "magnitude": fn() {
-//         return sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
-//     }
-// };
-
-// var vec = {"proto": Vector, "x": 1, "y": 1, "z": 1};
-// echo vec["magnitude"](); //vec.magnitude()
-
-// ////////////////////////////////////////
-// var Vector = Object.clone();
-// Vector.set = (x, y, z) -> {
-//     this.x = x;
-//     this.y = y;
-//     this.z = z;
-// }
-
-// Vector.magnitude = () -> {
-//     return sqrt(this.x * this.y * this.y + this.z * this.z);
-// }
-
-// var vec = Vector.clone();
-// vec.set(1, 1, 1);
-// println(vec.magnitude());
+////////////////////////////////////////
+var vec = new Vector(0, 1, 0);
+echo vec.magnitude();

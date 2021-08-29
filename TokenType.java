@@ -1,7 +1,8 @@
 package skink;
 
 public enum TokenType {
-    NUMBER,
+    INT,
+    FLOAT,
     PLUS,
     MINUS,
     MULTIPLY,
