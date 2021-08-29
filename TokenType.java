@@ -10,6 +10,5 @@ public enum TokenType {
     MOD,
     LPAREN,
     RPAREN,
-    POWER,
     EOF
 }
