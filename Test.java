@@ -8,6 +8,6 @@ public class Test {
         Lexer lexer = new Lexer(code);
         Parser parser = new Parser(lexer.getTokens());
         
-        System.out.println(parser.parse());
+        System.out.println(2);
     }
 }
