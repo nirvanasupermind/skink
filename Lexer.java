@@ -51,11 +51,11 @@ public class Lexer {
            } else if(this.current == '/') {
                tokens.add(new Token(TokenType.DIVIDE, "/", this.line));
                this.advance();
+           } else if(this.current == '%') {
+               tokens.add(new Token(TokenType.MOD, "%", this.line));
+               this.advance();
            } else if(this.current == '(') {
                tokens.add(new Token(TokenType.LPAREN, "(", this.line));
-               this.advance();
-           } else if(this.current == ')') {
-               tokens.add(new Token(TokenType.RPAREN, ")", this.line));
                this.advance();
            } else if(this.current == ')') {
                tokens.add(new Token(TokenType.RPAREN, ")", this.line));

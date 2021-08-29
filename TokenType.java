@@ -7,6 +7,7 @@ public enum TokenType {
     MINUS,
     MULTIPLY,
     DIVIDE,
+    MOD,
     LPAREN,
     RPAREN,
     POWER,
