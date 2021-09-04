@@ -66,7 +66,7 @@ public class Lexer {
 	}
 
 	private void launchRegEx() {
-        regEx.put(TokenType.WHITESPACE, "( ).*");
+    	regEx.put(TokenType.WHITESPACE, "( ).*");
 		regEx.put(TokenType.TAB, "(\t).*");
 		regEx.put(TokenType.PLUS, "(\\+{1}).*");
 		regEx.put(TokenType.MINUS, "(\\-{1}).*");

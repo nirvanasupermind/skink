@@ -14,22 +14,22 @@ public class Token {
 	}
 
 	public int getBegin() {
-		return beginIndex;
+		return this.beginIndex;
 	}
 
 	public int getEnd() {
-		return endIndex;
+		return this.endIndex;
 	}
 
 	public String getTokenString() {
-		return tokenString;
+		return this.tokenString;
 	}
 
 	public TokenType getTokenType() {
-		return tokenType;
+		return this.tokenType;
 	}
 
 	public String toString() {
-		return String.format("(%s, %s)", tokenType.toString(), tokenString);
+		return String.format("(%s, %s)", this.tokenType.toString(), this.tokenString);
 	}
 }
