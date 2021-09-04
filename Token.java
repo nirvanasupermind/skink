@@ -1,17 +1,35 @@
-package skink;
+package com.github.skink;
 
 public class Token {
-    public TokenType type;
-    public String value;
-    public int line;
+	private int beginIndex;
+	private int endIndex;
+	private TokenType tokenType;
+	private String tokenString;
 
-    public Token(TokenType type, String value, int index) {
-        this.type = type;
-        this.value = value;
-    }
+	public Token(int beginIndex, int endIndex, String tokenString, TokenType tokenType) {
+		this.beginIndex = beginIndex;
+		this.endIndex = endIndex;
+		this.tokenType = tokenType;
+		this.tokenString = tokenString;
+	}
 
-    //for debugging
-    public String toString() {
-        return String.format("(%s, %s)", this.type.toString(), this.value.toString());
-    }
+	public int getBegin() {
+		return beginIndex;
+	}
+
+	public int getEnd() {
+		return endIndex;
+	}
+
+	public String getTokenString() {
+		return tokenString;
+	}
+
+	public TokenType getTokenType() {
+		return tokenType;
+	}
+
+	public String toString() {
+		return String.format("(%s, %s)", tokenType.toString(), tokenString);
+	}
 }

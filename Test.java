@@ -1,13 +1,7 @@
-import skink.Lexer;
-import skink.Parser;
+import com.github.skink.Skink;
 
 public class Test {
     public static void main(String[] args) {
-        String code = "(1 + 2) * 3";
-
-        Lexer lexer = new Lexer(code);
-        Parser parser = new Parser(lexer.getTokens());
-        
-        System.out.println(2);
+        Skink.run("\t(1 + 2) & true");
     }
 }
