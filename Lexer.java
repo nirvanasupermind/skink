@@ -1,87 +1,88 @@
 package com.github.skink;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.ArrayList;
 
 public class Lexer {
-	public static final String KEYWORDS = "true|false";
+    public final String file;
+    public final String text;
+    public int position;
+    public int line;
 
-	private Map<TokenType, String> regEx;
-	private List<Token> result;
+    public Lexer(String file, String text) {
+        this.file = file;
+        this.text = text + '\0';
+        this.position = 0;
+        this.line = 1;
+    }
 
-	public Lexer() {
-		regEx = new TreeMap<TokenType, String>();
-		launchRegEx();
-		result = new ArrayList<Token>();
-	}
+    public char current() {
+        return this.text.charAt(this.position);    
+    }
 
-	public void tokenize(String source) {
-		int position = 0;
-		Token token = null;
-		do {
-			token = separateToken(source, position);
-			if (token != null) {
-				position = token.getEnd();
-				result.add(token);
-			}
-		} while (token != null && position != source.length());
-		if (position != source.length()) {
-			throw new RuntimeException("Lexical error at position # "+ position);
-		}
-	}
+    public void advance() {
+        this.position++;
+    }
 
-	public List<Token> getTokens() {
-		return result;
-	}
+    public List<Token> getTokens() {
+        List<Token> tokens = new ArrayList<Token>();
+        while(this.current() != '\0') {
+            if(this.current() == '\n') {
+                this.line++;
+                this.advance();
+            } else if(Constants.WHITESPACE.indexOf(this.current()) != -1) {
+                this.advance();
+            } else if(this.current() == '.' || Constants.DIGITS.indexOf(this.current()) != -1) {
+                tokens.add(this.getNumber());
+            } else if(this.current() == '+') {
+                tokens.add(new Token(TokenType.PLUS, "+", line));
+                this.advance();
+            } else if(this.current() == '-') {
+                tokens.add(new Token(TokenType.MINUS, "-", line));
+                this.advance();
+            } else if(this.current() == '*') {
+                tokens.add(new Token(TokenType.MULTIPLY, "*", line));
+                this.advance();
+            } else if(this.current() == '/') {
+                tokens.add(new Token(TokenType.DIVIDE, "/", line));
+                this.advance();
+            } else if(this.current() == '%') {
+                tokens.add(new Token(TokenType.MOD, "%", line));
+                this.advance();
+            } else if(this.current() == '(') {
+                tokens.add(new Token(TokenType.LPAREN, "(", line));
+                this.advance();
+            } else if(this.current() == ')') {
+                tokens.add(new Token(TokenType.RPAREN, ")", line));
+                this.advance();
+            } else {
+                Errors.printError(this.file, this.line, "lexical error");
+            }
+        }
 
-	public List<Token> getFilteredTokens() {
-		List<Token> filteredResult = new ArrayList<Token>();
-		for (Token t : this.result) {
-			if (!t.getTokenType().isAuxiliary()) {
-				filteredResult.add(t);
-			}
-		}
-		return filteredResult;
-	}
+        return tokens;
+    }
 
-	private Token separateToken(String source, int fromIndex) {
-		if (fromIndex < 0 || fromIndex >= source.length()) {
-			throw new IllegalArgumentException("Illegal index in the input stream!");
-		}
-		for (TokenType tokenType : TokenType.values()) {
-			Pattern p = Pattern.compile(".{" + fromIndex + "}" + regEx.get(tokenType),
-					Pattern.DOTALL);
-			Matcher m = p.matcher(source);
-			if (m.matches()) {
-				String lexema = m.group(1);
-				return new Token(fromIndex, fromIndex + lexema.length(), lexema, tokenType);
-			}
-		}
+    public Token getNumber() {
+        int decimalPointCount = 0;
+        String number = "" + this.current();
+        this.advance();
 
-		return null;
-	}
+        while(this.current() != '\0' && (this.current() == '.' || Constants.DIGITS.indexOf(this.current()) != -1)) {
+            if(this.current() == '.') {
+                decimalPointCount++;
+                if(decimalPointCount > 1)
+                    break;
+            }
 
-	private void launchRegEx() {
-    	regEx.put(TokenType.WHITESPACE, "( ).*");
-		regEx.put(TokenType.TAB, "(\t).*");
-		regEx.put(TokenType.PLUS, "(\\+{1}).*");
-		regEx.put(TokenType.MINUS, "(\\-{1}).*");
-		regEx.put(TokenType.MULTIPLY, "(\\*).*");
-		regEx.put(TokenType.DIVIDE, "(\\/).*");
-		regEx.put(TokenType.MOD, "(%).*");
-		regEx.put(TokenType.AND, "(&&).*");
-		regEx.put(TokenType.OR, "(\\|\\|).*");
-		regEx.put(TokenType.XOR, "(\\^\\^).*");
-		regEx.put(TokenType.NOT, "(!!).*");
-		regEx.put(TokenType.LBRACE, "(\\().*");
-		regEx.put(TokenType.RBRACE, "(\\)).*");
-		regEx.put(TokenType.INT, "\\b(\\d{1,9}(?![\\d.]))\\b.*");
-		regEx.put(TokenType.FLOAT, "\\b(\\d{1,9}\\.\\d{1,32})\\b.*");
-		regEx.put(TokenType.IDENTIFIER, String.format("(\\b(?!(?:%s)\\b)[a-z]+).*", Lexer.KEYWORDS));
-		regEx.put(TokenType.KEYWORD, String.format("\\b(%s)\\b.*", Lexer.KEYWORDS));
-	}
+            number += this.current();
+            this.advance();
+        }
+
+        if(decimalPointCount == 0 && number.charAt(0) != '.') {
+            return new Token(TokenType.INT, number, this.line); 
+        } else {
+            return new Token(TokenType.FLOAT, number, this.line); 
+        }
+    }
 }

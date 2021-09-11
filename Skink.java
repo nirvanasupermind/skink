@@ -1,17 +1,12 @@
 package com.github.skink;
 
-import java.util.List;
-
 public class Skink {
-    public static void run(String source) {
-        Lexer lexer = new Lexer();
-        lexer.tokenize(source);
-        List<Token> tokens = lexer.getTokens();
+    private static void run(String file, String text) {
+        Lexer lexer = new Lexer(file, text);
+        System.out.println(String.format("tokens: %s", lexer.getTokens()));
+    }
 
-        System.out.println("TOKENS: ");
-
-        for(var i = 0; i < tokens.size(); i++) {
-        System.out.println(tokens.get(i));
-        }
+    public static void runText(String text) {
+        run("<anonymous>", text);
     }
 }
