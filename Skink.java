@@ -8,9 +8,9 @@ public class Skink {
         List<Token> tokens = lexer.getTokens();
     
         Parser parser = new Parser(file, tokens);
-        Node node = parser.parse();
+        Node tree = parser.parse();
 
-        System.out.println(String.format("node: %s", node));
+        System.out.println(String.format("tree: %s", tree));
     }
 
     public static void runText(String text) {
