@@ -1,7 +1,7 @@
 package com.github.skink;
 
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 
 public class Lexer {
     public final String file;
@@ -56,9 +56,12 @@ public class Lexer {
                 tokens.add(new Token(TokenType.RPAREN, ")", line));
                 this.advance();
             } else {
-                Errors.printError(this.file, this.line, "lexical error");
+                Errors.raiseError(this.file, this.line, "lexical error");
             }
         }
+
+        tokens.add(new Token(TokenType.EOF, "", line));
+        this.advance();
 
         return tokens;
     }

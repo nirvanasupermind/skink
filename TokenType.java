@@ -9,5 +9,6 @@ public enum TokenType {
     DIVIDE,
     MOD,
     LPAREN,
-    RPAREN
+    RPAREN,
+    EOF
 }
