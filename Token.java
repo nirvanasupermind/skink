@@ -1,16 +1,30 @@
 package com.github.skink;
 
 public class Token {
-    public TokenType type;
-    public String value;
-    public int line;
-    public Token(TokenType type, String value, int line) {
-        this.type = type;
-        this.value = value;
+    private final int line;
+    private final TokenType type;
+    private final String lexeme;
+
+    public Token(int line, TokenType type, String lexeme) {
         this.line = line;
+        this.type = type;
+        this.lexeme = lexeme;
     }
 
+    public int getLine() {
+        return this.line;
+    }
+
+    public TokenType getType() {
+        return this.type;
+    }
+
+    public String getLexeme() {
+        return this.lexeme;
+    }
+
+    @Override
     public String toString() {
-        return String.format("%s:%s", this.type, this.value);
+        return String.format("(%s, %s)", this.type, this.lexeme);
     }
 }
