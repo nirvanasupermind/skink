@@ -1,11 +1,11 @@
 package com.github.skink;
 
-public class PeekableStream {
+public class CharStream {
     private final String source;
     private int position;
     public char next;
 
-    public PeekableStream(String source) {
+    public CharStream(String source) {
         this.source = source;
         this.position = -1;        
         this.fill();

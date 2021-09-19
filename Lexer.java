@@ -3,7 +3,7 @@ package com.github.skink;
 import java.util.LinkedList;
 
 public class Lexer {
-    private static String scan(char firstChar, PeekableStream chars, String allowed) {
+    private static String scan(char firstChar, CharStream chars, String allowed) {
         String ret = String.valueOf(firstChar);
         int p = chars.next;
 
@@ -18,7 +18,7 @@ public class Lexer {
     public static LinkedList<Token> lex(String file, String source) {
         LinkedList<Token> tokens = new LinkedList<Token>();
         
-        PeekableStream chars = new PeekableStream(source);
+        CharStream chars = new CharStream(source);
         int line = 1;
 
         while(chars.next != '\0') {
