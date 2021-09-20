@@ -3,44 +3,62 @@ package com.github.skink;
 import java.util.LinkedList;
 
 public class Lexer {
-    private static String scan(char firstChar, CharStream chars, String allowed) {
+    private final String file;
+    private final CharStream chars;
+
+    public Lexer(String file, CharStream chars) {
+        this.file = file;
+        this.chars = chars;
+    }
+
+    private String scan(char firstChar, String allowed) {
         String ret = String.valueOf(firstChar);
-        int p = chars.next;
+        int p = this.chars.next;
 
         while(p != '\0' && allowed.indexOf(p) != -1) {
-            ret += chars.moveNext();
-            p = chars.next;
+            ret += this.chars.moveNext();
+            p = this.chars.next;
         }
 
         return ret;
     }
 
-    public static LinkedList<Token> lex(String file, String source) {
+    public LinkedList<Token> lex() {
         LinkedList<Token> tokens = new LinkedList<Token>();
         
-        CharStream chars = new CharStream(source);
         int line = 1;
 
-        while(chars.next != '\0') {
-            char c = chars.moveNext();
+        while(this.chars.next != '\0') {
+            char c = this.chars.moveNext();
             if(Constants.WHITESPACE.indexOf(c) != -1) {
-
+                
             } else if(Constants.NEWLINES.indexOf(c) != -1) {
+                tokens.add(new Token(line, TokenType.NEWLINE, String.valueOf(c)));
                 line++;
+            } else if(c == ';') {
+                tokens.add(new Token(line, TokenType.SEMICOLON, String.valueOf(c)));
             } else if(c == '(') {
                 tokens.add(new Token(line, TokenType.OPEN_BRACE, String.valueOf(c)));
             } else if(c == ')') {
                 tokens.add(new Token(line, TokenType.CLOSE_BRACE, String.valueOf(c)));
-            } else if(Constants.OPERATIONS.indexOf(c) != -1) {
-                tokens.add(new Token(line, TokenType.OPERATION, String.valueOf(c)));
+            } else if(c == '+') {
+                tokens.add(new Token(line, TokenType.PLUS, String.valueOf(c)));
+            } else if(c == '-') {
+                tokens.add(new Token(line, TokenType.MINUS, String.valueOf(c)));
+            } else if(c == '*') {
+                tokens.add(new Token(line, TokenType.MULTIPLY, String.valueOf(c)));
+            } else if(c == '/') {
+                tokens.add(new Token(line, TokenType.DIVIDE, String.valueOf(c)));
+            } else if(c == '%') {
+                tokens.add(new Token(line, TokenType.MOD, String.valueOf(c)));
             } else if(Constants.DIGITS.indexOf(c) != -1) {
-                String lexeme = Lexer.scan(c, chars, Constants.DIGITS + ".");
-                if(lexeme.indexOf('.') != -1)
-                    tokens.add(new Token(line, TokenType.FLOAT, lexeme));
+                String value = this.scan(c, Constants.DIGITS + ".");
+                if(value.indexOf('.') != -1)
+                    tokens.add(new Token(line, TokenType.FLOAT, value));
                 else
-                    tokens.add(new Token(line, TokenType.INT, lexeme));
+                    tokens.add(new Token(line, TokenType.INT, value));
             } else {
-                throw new SkinkException(file, line, "lexical error");
+                throw new SkinkException(this.file, line, "lexical error");
             }
         }
 
