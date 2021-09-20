@@ -33,8 +33,10 @@ public class Lexer {
             if(Constants.WHITESPACE.indexOf(c) != -1) {
                 
             } else if(Constants.NEWLINES.indexOf(c) != -1) {
-                // tokens.add(new Token(line, TokenType.NEWLINE, String.valueOf(c)));
+                tokens.add(new Token(line, TokenType.NEWLINE, String.valueOf(c)));
                 line++;
+            } else if(c == ';') {
+                tokens.add(new Token(line, TokenType.SEMICOLON, String.valueOf(c)));
             } else if(c == '(') {
                 tokens.add(new Token(line, TokenType.OPEN_BRACE, String.valueOf(c)));
             } else if(c == ')') {
