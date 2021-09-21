@@ -1,4 +1,5 @@
-program = add_expr;
-add_expr = mul_expr | add_expr, ("*" | "/" | "%"), mul_expr;
-mul_expr = atom | mul_expr, ("*" | "/" | "%"), atom;
+program = expr, { NEWLINE, expr };
+expr = add_expr;
+add_expr = mul_expr, { ("*" | "/" | "%"), mul_expr };
+mul_expr = atom, { ("+" | "-"), atom };
 atom = INT | FLOAT;
