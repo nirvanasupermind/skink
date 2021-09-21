@@ -1,5 +1,6 @@
 program = expr, { NEWLINE, expr };
 expr = add_expr;
 add_expr = mul_expr, { ("*" | "/" | "%"), mul_expr };
-mul_expr = atom, { ("+" | "-"), atom };
+mul_expr = unary_expr, { ("+" | "-"), unary_expr };
+unary_expr = { "+" | "-" }, atom;
 atom = INT | FLOAT;
