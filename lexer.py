@@ -9,6 +9,9 @@ class Lexer:
         self.file = file
         self.line = 1
         self.chars = chars
+        self.keywords = [
+            'var'
+        ]
 
     def _scan(self, first_char, allowed):
         result = first_char
@@ -20,6 +23,22 @@ class Lexer:
 
         return result
         
+    
+    def _scan_string(self, delim, desc):
+        result = delim
+        while self.chars.next != delim:
+            c = self.chars.move_next()
+            if c == '\n': self.line += 1
+
+            if c is None:
+                raise Error(self.file, self.line, f'unclosed {desc}')
+            result += c
+
+        self.chars.move_next()
+        result += delim
+
+        return result
+
     def _scan_num(self, first_char):
         result = first_char
         p = self.chars.next
@@ -35,6 +54,7 @@ class Lexer:
 
         return result
 
+    
     def get_next_token(self):
         c = self.chars.move_next() 
         if c == None:
@@ -43,12 +63,22 @@ class Lexer:
             return self.get_next_token()
         elif c in ';\n':
             result = Token(self.line, 'newline', c)
-            self.line += 1
+            if c == '\n': self.line += 1
             return result
-        elif c in '+-*/%()':
+        elif c in '+-*/%=()':
             return Token(self.line, c, c) 
         elif re.match('[.0-9]', c):
             value = self._scan_num(c)
             return Token(self.line, 'num', value)
+        elif re.match('[_a-zA-Z0-9]+', c):
+            identifier = self._scan(c, '[_a-zA-Z0-9]+')
+
+            if identifier in self.keywords:
+                return Token(self.line, 'keyword', identifier)
+            else:
+                return Token(self.line, 'identifier', identifier)
+        elif c == '`':
+            value = self._scan_string('`', 'backtick identifier')
+            return Token(self.line, 'identifier', value)
         else:
             raise Error(self.file, self.line, f'unexpected "{c}"')

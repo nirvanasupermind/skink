@@ -1,7 +1,8 @@
-from evaluator import Evaluator
 from peekable_stream import PeekableStream
 from lexer import Lexer
 from parser_ import Parser
+from evaluator import Evaluator
+from env import Env
 
 def _run(file, source):
     chars = PeekableStream(source)
@@ -10,7 +11,7 @@ def _run(file, source):
     parser = Parser(file, lexer)
     tree = parser.program()
 
-    evaluator = Evaluator(file)
+    evaluator = Evaluator(file, Env())
 
     print(f'result:\n{evaluator.eval(tree)}')
 

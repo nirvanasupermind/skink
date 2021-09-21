@@ -1,6 +1,8 @@
 program = expr, { NEWLINE, expr };
-expr = add_expr;
+expr = var_expr | assignment_expr;
+var_expr = "var", IDENTIFIER, "=", expr;
+assignment_expr = add_expr, { "=", add_expr };
 add_expr = mul_expr, { ("*" | "/" | "%"), mul_expr };
 mul_expr = unary_expr, { ("+" | "-"), unary_expr };
 unary_expr = { "+" | "-" }, atom;
-atom = INT | FLOAT;
+atom = INT | FLOAT | IDENTIFIER;

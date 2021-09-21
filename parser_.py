@@ -21,22 +21,62 @@ class Parser:
             self.error(self.current_token) 
 
     def program(self):  
-        if self.current_token.type == 'eof': # safety
-            return ProgramNode(self.current_token.line, [])
+        # if self.current_token.type == 'eof': # safety
+        #     return ProgramNode(self.current_token.line, [])
         
+        while self.current_token.type == 'newline':
+            self.eat('newline')
+
         first_statement = self.expr()
         result = ProgramNode(first_statement.line, [first_statement])
 
+
+        while self.current_token.type == 'newline':
+            while self.current_token.type == 'newline':
+                self.eat('newline')
+
+            result.statements.append(self.expr())
+
         while self.current_token.type == 'newline':
             self.eat('newline')
-            result.statements.append(self.expr())
+
 
         self.eat('eof')
         return result
 
     def expr(self):
-        return self.add_expr()
+        if self.current_token.type == 'eof': # safety
+            return EmptyNode(self.current_token.line)
+
+        if self.current_token.matches('keyword', 'var'):
+            return self.var_expr()
+
+        return self.assignment_expr()
     
+    def var_expr(self):
+        line = self.current_token.line
+        self.eat('keyword')
+
+        name = self.current_token
+
+        self.eat('identifier')
+        self.eat('=')
+
+        value = self.expr()
+
+        return VarNode(line, name, value)
+
+    def assignment_expr(self):
+        result = self.add_expr()
+
+        while self.current_token.type == '=':
+            op = self.current_token
+            self.eat('=')
+
+            result = BinaryNode(result.line, result, op, self.mul_expr())
+
+        return result        
+
     def add_expr(self):
         result = self.mul_expr()
 
@@ -89,6 +129,9 @@ class Parser:
         if token.type == 'num':
             self.eat('num')
             return NumNode(token.line, token)
+        elif token.type == 'identifier':
+            self.eat('identifier')
+            return IdentifierNode(token.line, token)
         elif token.type == '(':
             self.eat('(')
             expr = self.expr()
