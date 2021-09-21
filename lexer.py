@@ -10,7 +10,8 @@ class Lexer:
         self.line = 1
         self.chars = chars
         self.keywords = [
-            'var'
+            'var',
+            'nil'
         ]
 
     def _scan(self, first_char, allowed):

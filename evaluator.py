@@ -19,7 +19,9 @@ class Evaluator:
                 try:
                     return Num(np.int32(node.token.value))
                 except OverflowError:
-                    return Num(np.int32(int(node.token.value) % 2 ** 32))         
+                    return Num(np.int32(int(node.token.value) % 2 ** 32))  
+        elif isinstance(node, NilNode):
+            return Nil()       
         elif isinstance(node, IdentifierNode):
             name = node.token.value
 

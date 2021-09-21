@@ -21,9 +21,6 @@ class Parser:
             self.error(self.current_token) 
 
     def program(self):  
-        # if self.current_token.type == 'eof': # safety
-        #     return ProgramNode(self.current_token.line, [])
-        
         while self.current_token.type == 'newline':
             self.eat('newline')
 
@@ -132,6 +129,9 @@ class Parser:
         elif token.type == 'identifier':
             self.eat('identifier')
             return IdentifierNode(token.line, token)
+        elif token.matches('keyword', 'nil'):
+            self.eat('keyword')
+            return NilNode(token.line)
         elif token.type == '(':
             self.eat('(')
             expr = self.expr()

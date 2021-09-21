@@ -16,6 +16,13 @@ class NumNode(Node):
     def __repr__(self):
         return f'(num {self.token.value})'
     
+class NilNode(Node):
+    def __init__(self, line):
+        self.line = line
+
+    def __repr__(self):
+        return f'(nil)'
+    
 class IdentifierNode(Node):
     def __init__(self, line, token):
         self.line = line
