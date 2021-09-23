@@ -2,6 +2,7 @@ from errors import Error
 from tokens import TokenType, Token
 
 WHITESPACE = ' \t'
+NEWLINES = ';\n'
 DIGITS = '0123456789'
 
 class Lexer:
@@ -28,6 +29,9 @@ class Lexer:
         while self.current_char != None:
             if self.current_char in WHITESPACE:
                 self.advance()
+            elif self.current_char in NEWLINES:
+                tokens.append(Token(self.line, TokenType.NEWLINE))
+                self.advance()
             elif self.current_char == '.' or self.current_char in DIGITS:
                 tokens.append(self.get_number())
             elif self.current_char == '+':
@@ -53,6 +57,8 @@ class Lexer:
                 self.advance()
             else:
                 raise Error(self.file, self.line, 'lexical error')
+
+        tokens.append(Token(self.line, TokenType.EOF))
 
         return tokens
 

@@ -1,4 +1,5 @@
 class TokenType:
+    NEWLINE = 'NEWLINE'
     NUMBER = 'NUMBER'
     PLUS = 'PLUS'
     MINUS = 'MINUS'
