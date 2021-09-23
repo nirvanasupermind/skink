@@ -1,10 +1,10 @@
 class Point {
-    var constructor = (x, y) -> {
+    var constructor = (this, x, y) -> {
         this.x = x;
         this.y = y;
     };
 
-    var plus = (other) -> {
+    var plus = (this, other) -> {
         return new Point(this.x + other.x, this.y + other.y);
     };
 }
