@@ -34,12 +34,28 @@ class Parser:
 
         while self.current_token.type != TokenType.EOF and self.current_token.type == TokenType.NEWLINE:
             self.advance()
+
             statement = self.expr()
             statements.append(statement)       
-
+        
         return StatementsNode(line, statements)     
 
     def expr(self):
+        if self.current_token.matches(TokenType.KEYWORD, 'var'):
+            return self.var_expr()
+        else:
+            return self.assignment_expr()
+
+    def assignment_expr(self):
+        result = self.additive_expr()
+
+        while self.current_token.type != TokenType.EOF and self.current_token.type == TokenType.EQ:
+            self.advance()
+            result = AssignNode(result.line, result, self.term())
+
+        return result
+
+    def additive_expr(self):
         result = self.term()
 
         while self.current_token.type != TokenType.EOF and self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
@@ -51,6 +67,24 @@ class Parser:
                 result = SubtractNode(result.line, result, self.term())
 
         return result
+
+    def var_expr(self):
+        line = self.current_token.line
+        self.advance()
+
+        if self.current_token.type != TokenType.IDENTIIFIER:
+            self.raise_error(self.current_token)
+        
+        name = self.current_token
+        self.advance()
+
+        if self.current_token.type != TokenType.EQ:
+            self.raise_error(self.current_token)
+    
+        self.advance()
+        value = self.expr()
+
+        return VarNode(line, name, value)
 
     def term(self):
         result = self.factor()
@@ -65,6 +99,7 @@ class Parser:
             elif self.current_token.type == TokenType.MOD:
                 self.advance()
                 result = ModNode(result.line, result, self.factor())
+                
         return result
 
     def factor(self):
@@ -83,6 +118,10 @@ class Parser:
         elif token.type == TokenType.NUMBER:
             self.advance()
             return NumberNode(token.line, token)
+
+        elif token.type == TokenType.IDENTIIFIER:
+            self.advance()
+            return IdentifierNode(token.line, token)
 
         elif token.type == TokenType.PLUS:
             self.advance()

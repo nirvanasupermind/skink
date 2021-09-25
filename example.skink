@@ -13,4 +13,4 @@ class Point {
 var x = new Point(1, 1)
 var y = new Point(1, 2)
 
-System.println(x + y)
+Console.println(x + y)

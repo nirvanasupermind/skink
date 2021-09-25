@@ -2,6 +2,7 @@ import sys
 from lexer import Lexer
 from parser_ import Parser
 from interpreter import Interpreter
+from symbol_table import SymbolTable
 
 def _run(file, text):
     lexer = Lexer(file, text)
@@ -10,8 +11,8 @@ def _run(file, text):
     parser = Parser(file, tokens)
     tree = parser.parse()
 
-    interpreter = Interpreter(file)
-    result = interpreter.visit(tree)
+    interpreter = Interpreter(file, SymbolTable())
+    result = interpreter.visit(tree, interpreter.global_symbol_table)
 
     print(result)
 

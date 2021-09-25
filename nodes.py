@@ -11,6 +11,14 @@ class NumberNode:
         self.token = token
     
     def  __repr__(self):
+        return f'(number {self.token.value})'
+
+class IdentifierNode:
+    def __init__(self, line, token):
+        self.line = line
+        self.token = token
+    
+    def  __repr__(self):
         return f'{self.token.value}'
 
 class AddNode:
@@ -58,6 +66,15 @@ class ModNode:
     def  __repr__(self):
         return f'(mod {self.node_a} {self.node_b})'
 
+class AssignNode:
+    def __init__(self, line, name, value):
+        self.line = line
+        self.name = name
+        self.value = value
+    
+    def  __repr__(self):
+        return f'(assign {self.name} {self.value})'
+
 class PlusNode:
     def __init__(self, line, node):
         self.line = line
@@ -74,6 +91,15 @@ class MinusNode:
     def  __repr__(self):
         return f'(minus {self.node})'
 
+class VarNode:
+    def __init__(self, line, name, value):
+        self.line = line
+        self.name = name
+        self.value = value
+    
+    def  __repr__(self):
+        return f'(var {self.name.value} {self.value.value})'
+
 class StatementsNode:
     def __init__(self, line, statements):
         self.line = line
@@ -81,3 +107,4 @@ class StatementsNode:
     
     def  __repr__(self):
         return f'(statements {" ".join(map(str, self.statements))})'
+    
