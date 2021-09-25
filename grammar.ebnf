@@ -1,6 +1,8 @@
 statements = [expr, { NEWLINE, expr }];
-expr = var_expr | term, { (PLLUS | MINUS), term };
+expr = var_expr | term, { (PLUS | MINUS), term };
 var_expr = "var", IDENTIFIER, "=", expr;
+assignment_expr = additive_expr, { EQ, additive_expr };
+additive_expr = term, { (PLUS | MINUS), term };
 term = factor, { (MULTIPLY | DIVIDE | MOD), factor };
 factor = brace_expr | INT | FLOAT | IDENTIFIER;
 brace_expr = "(", expr, ")";
