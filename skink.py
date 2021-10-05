@@ -1,18 +1,16 @@
 from lexer import Lexer
-# from parser_ import Parser
-
-# def run_string(text):
-#     run('<anonymous>', text)
+from parser_ import Parser
 
 def run(file):
-    contents = open(file, 'r').read()
+    text = open(file, 'r').read()
     
-    _run(file.split('/')[-1], contents)
-    
-def _run(text):
-    lexer = Lexer(text) 
-    # tokens = lexer.generate_tokens()
-    
-    # # parser = Parser(file, tokens)
+    _run(text)
 
-    # # print(f'tree: {parser.parse()}')
+def _run(text):
+    lexer = Lexer(text)
+    tokens = lexer.generate_tokens()
+
+    parser = Parser(tokens)
+    tree = parser.parse()
+    
+    print(f'tree: {tree}')
