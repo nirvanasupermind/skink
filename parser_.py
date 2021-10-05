@@ -1,73 +1,57 @@
-from errors import Error
-from tokens import Token, TokenType
-from nodes import Node
+from tokens import TokenType
 
 class Parser:
-    def __init__(self, file, tokens):
-        self.file = file
+    def __init__(self, tokens):
         self.tokens = iter(tokens)
         self.advance()
 
-    def raise_error(self, token):
-        raise Error(self.file, token.line, 'syntax error')
+    def raise_error(self):
+        raise Exception("Invalid syntax")
 
     def advance(self):
-        self.current_token = next(self.tokens)
+        try:
+            self.current_token = next(self.tokens)
+        except StopIteration:
+            self.current_token = None
 
     def parse(self):
-        if self.current_token.type == TokenType.EOF:
-            return Node(self.current_token.line, ('empty',))
+        if self.current_token == None:
+            return None
 
-        result = self.statements()
+        result = self.expr()
 
-        if self.current_token.type != TokenType.EOF:
-            self.raise_error(self.current_token)
+        if self.current_token != None:
+            self.raise_error()
 
         return result
 
-    def statements(self):
-        line = self.current_token.line
-        statements = []
-
-        statement = self.expr()
-        statements.append(statement)
-
-        while self.current_token != None and self.current_token.type == TokenType.NEWLINE:
-            self.advance()
-            statements.append(self.expr())
-            
-        return Node(line, ('statements', *statements))
-
     def expr(self):
-        return self.additive_expr()
-    
-    def additive_expr(self):
-        result = self.multiplicative_expr()
+        result = self.term()
 
         while self.current_token != None and self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
             if self.current_token.type == TokenType.PLUS:
                 self.advance()
-                result = Node(result.line, ('add', result, self.multiplicative_expr()))
+                result = ('add', result, self.term())
             elif self.current_token.type == TokenType.MINUS:
                 self.advance()
-                result = Node(result.line, ('subtract', result, self.multiplicative_expr()))
+                result = ('subtract', result, self.term())
 
         return result
 
-    def multiplicative_expr(self):
+    def term(self):
         result = self.factor()
 
         while self.current_token != None and self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE, TokenType.MOD):
             if self.current_token.type == TokenType.MULTIPLY:
                 self.advance()
-                result = Node(result.line, ('multiply', result, self.factor()))
+                result = ('multiply', result, self.factor())
             elif self.current_token.type == TokenType.DIVIDE:
                 self.advance()
-                result = Node(result.line, ('divide', result, self.factor()))
+                result = ('divide', result, self.factor())
             elif self.current_token.type == TokenType.MOD:
                 self.advance()
-                result = Node(result.line, ('mod', result, self.factor()))
-
+                result = ('mod', result, self.factor())
+                
         return result
 
     def factor(self):
@@ -78,21 +62,21 @@ class Parser:
             result = self.expr()
 
             if self.current_token.type != TokenType.RPAREN:
-                self.raise_error(self.current_token)
+                self.raise_error()
             
             self.advance()
             return result
 
         elif token.type == TokenType.NUMBER:
             self.advance()
-            return Node(token.line, ('number', token.value))
+            return ('number', token.value)
 
         elif token.type == TokenType.PLUS:
             self.advance()
-            return Node(token.line, ('plus', self.factor()))
+            return ('plus', self.factor())
         
         elif token.type == TokenType.MINUS:
             self.advance()
-            return Node(token.line, ('minus', self.factor()))
+            return ('minus', self.factor())
         
-        self.raise_error(self.current_token)
+        self.raise_error()

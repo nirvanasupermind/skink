@@ -1,67 +1,50 @@
-from errors import Error
-from tokens import TokenType, Token
+from tokens import Token, TokenType
 
-WHITESPACE = ' \t'
-NEWLINE = ';\n'
+WHITESPACE = ' \n\t'
 DIGITS = '0123456789'
 
 class Lexer:
-    def __init__(self, file, text):
-        self.file = file
+    def __init__(self, text):
         self.text = iter(text)
-        self.current_char = None
-        self.line = 1
         self.advance()
 
-    
     def advance(self):
         try:
             self.current_char = next(self.text)
         except StopIteration:
             self.current_char = None
-        
-    def get_tokens(self):
-        tokens = []
 
+    def generate_tokens(self):
         while self.current_char != None:
             if self.current_char in WHITESPACE:
-                self.advance() 
-            elif self.current_char in NEWLINE:
-                tokens.append(Token(self.line, TokenType.NEWLINE))
                 self.advance()
-                self.line += 1
-            elif self.current_char in DIGITS:
-                tokens.append(self.get_number())
+            elif self.current_char == '.' or self.current_char in DIGITS:
+                yield self.generate_number()
             elif self.current_char == '+':
-                tokens.append(Token(self.line, TokenType.PLUS))
-                self.advance() 
+                self.advance()
+                yield Token(TokenType.PLUS)
             elif self.current_char == '-':
-                tokens.append(Token(self.line, TokenType.MINUS))
-                self.advance() 
+                self.advance()
+                yield Token(TokenType.MINUS)
             elif self.current_char == '*':
-                tokens.append(Token(self.line, TokenType.MULTIPLY))
-                self.advance() 
+                self.advance()
+                yield Token(TokenType.MULTIPLY)
             elif self.current_char == '/':
-                tokens.append(Token(self.line, TokenType.DIVIDE))
                 self.advance()
+                yield Token(TokenType.DIVIDE)
             elif self.current_char == '%':
-                tokens.append(Token(self.line, TokenType.MOD))
                 self.advance()
+                yield Token(TokenType.MOD)
             elif self.current_char == '(':
-                tokens.append(Token(self.line, TokenType.LPAREN))
                 self.advance()
+                yield Token(TokenType.LPAREN)
             elif self.current_char == ')':
-                tokens.append(Token(self.line, TokenType.RPAREN))
                 self.advance()
+                yield Token(TokenType.RPAREN)
             else:
-                raise Error(self.file, self.line, 'lexical error')
+                raise Exception(f"Illegal character '{self.current_char}'")
 
-        tokens.append(Token(self.line, TokenType.EOF))
-        self.advance()
-
-        return tokens
-    
-    def get_number(self):
+    def generate_number(self):
         decimal_point_count = 0
         number_str = self.current_char
         self.advance()
@@ -75,4 +58,4 @@ class Lexer:
             number_str += self.current_char
             self.advance()
 
-        return Token(self.line, TokenType.NUMBER, number_str)
+        return Token(TokenType.NUMBER, number_str)
