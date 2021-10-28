@@ -1,12 +1,6 @@
 #include <iostream>
-#include "../tokens.cpp"
+#include "../skink.cpp"
 
-int main () {
-    TokenValue v = {.i=2};
-
-    Token token(TokenType::INT, v);
-
-    std::cout << token.str();
-
-    return 0;
+int main() {
+    skink::run("./test.skink");
 }
