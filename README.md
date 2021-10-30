@@ -1,4 +1,2 @@
 # skink
-**NOTICE**: this is work in progress
-
-A dynamic, class-based programming language.
+This project is abandoned in favor of [pluto](https://github.com/nirvanasupermind/pluto).
